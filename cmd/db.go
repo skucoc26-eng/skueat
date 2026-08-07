@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/json"
+	"io"
 	"log"
+	"os"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
@@ -21,17 +24,22 @@ type Restaurant struct {
 	RatingCount int     `json:"rating_count" gorm:"default:0"` // 참여 인원
 }
 
-// 별점 기록 테이블
+// 별점 및 리뷰 기록 테이블
 type Rating struct {
 	gorm.Model
 	RestaurantID uint   `json:"restaurant_id"`
 	UserID       string `json:"user_id"` // 카카오 고유 ID
 	Score        int    `json:"score"`
+	Comment      string `json:"comment" gorm:"type:text"` // 한 줄 평
 }
 
 func InitDB() {
 	var err error
-	DB, err = gorm.Open(sqlite.Open("restaurants.db"), &gorm.Config{})
+	dbPath := os.Getenv("DATABASE_PATH")
+	if dbPath == "" {
+		dbPath = "restaurants.db"
+	}
+	DB, err = gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
 	if err != nil {
 		log.Fatal("DB 연결 실패:", err)
 	}
@@ -41,6 +49,37 @@ func InitDB() {
 	var count int64
 	DB.Model(&Restaurant{}).Count(&count)
 	if count == 0 {
+		loadInitialData()
+	}
+}
+
+func loadInitialData() {
+	jsonFile, err := os.Open("restaurants.json")
+	if err != nil {
+		log.Println("restaurants.json 파일이 없거나 열 수 없습니다. 샘플 데이터를 로드합니다.")
+		seedData()
+		return
+	}
+	defer jsonFile.Close()
+
+	byteValue, err := io.ReadAll(jsonFile)
+	if err != nil {
+		log.Println("restaurants.json 파일을 읽는 도중 오류가 발생했습니다. 샘플 데이터를 로드합니다.")
+		seedData()
+		return
+	}
+
+	var samples []Restaurant
+	if err := json.Unmarshal(byteValue, &samples); err != nil {
+		log.Printf("restaurants.json 파싱 실패: %v. 샘플 데이터를 로드합니다.", err)
+		seedData()
+		return
+	}
+
+	if len(samples) > 0 {
+		DB.Create(&samples)
+		log.Printf("restaurants.json 으로부터 %d개의 맛집 데이터를 성공적으로 로드했습니다!", len(samples))
+	} else {
 		seedData()
 	}
 }

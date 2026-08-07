@@ -87,7 +87,11 @@ func main() {
 	log.Println("INFO  app started")
 
 	// 6. 세션 설정
-	store := cookie.NewStore([]byte("secret"))
+	sessionSecret := os.Getenv("SESSION_SECRET")
+	if sessionSecret == "" {
+		sessionSecret = "secret"
+	}
+	store := cookie.NewStore([]byte(sessionSecret))
 	r.Use(sessions.Sessions("mysession", store))
 
 	// 💡 여기서 정적 파일(CSS, JS) 경로를 설정해 줍니다.
@@ -184,9 +188,9 @@ func main() {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "로그인이 필요합니다."})
 			return
 		}
-
 		resID, _ := strconv.Atoi(c.PostForm("restaurant_id"))
 		score, _ := strconv.Atoi(c.PostForm("score"))
+		comment := c.PostForm("comment")
 
 		var res Restaurant
 		if err := DB.First(&res, resID).Error; err != nil {
@@ -198,6 +202,7 @@ func main() {
 			RestaurantID: uint(resID),
 			UserID:       userName.(string),
 			Score:        score,
+			Comment:      comment,
 		}
 		DB.Create(&rating)
 
@@ -209,6 +214,28 @@ func main() {
 		})
 
 		c.JSON(http.StatusOK, gin.H{"message": "평가가 완료되었습니다.", "new_avg": newAvg})
+	})
+
+	// 특정 식당의 리뷰(평가 + 한 줄 평) 목록 조회 API
+	r.GET("/api/reviews", func(c *gin.Context) {
+		resIDStr := c.Query("restaurant_id")
+		if resIDStr == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "restaurant_id가 필요합니다."})
+			return
+		}
+		resID, err := strconv.Atoi(resIDStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "잘못된 restaurant_id입니다."})
+			return
+		}
+
+		var reviews []Rating
+		if err := DB.Where("restaurant_id = ?", resID).Order("id desc").Find(&reviews).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "리뷰를 불러올 수 없습니다."})
+			return
+		}
+
+		c.JSON(http.StatusOK, reviews)
 	})
 
 	// 로그아웃

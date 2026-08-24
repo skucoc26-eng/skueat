@@ -6,20 +6,29 @@ let userCircle = null;
 let isGpsActive = false;
 let currentRestaurants = []; // 룰렛/랜덤 매칭에 사용될 현재 필터링된 맛집 목록 캐시
 let isRouletteRunning = false;
+let activeTooltipOverlay = null; // 현재 지도 위에 표시 중인 식당 이름 말풍선 오버레이
+let showMarkers = true; // 지도 위의 음식점 마커들의 전체 표시 여부
 
-// 안양 8동 경계 좌표
-const boundaryCoords = [[126.936009, 37.38326], [126.936242, 37.382663], [126.936444, 37.382211], [126.936508, 37.382068], [126.936646, 37.381803], [126.936743, 37.381642], [126.936765, 37.381605], [126.93691, 37.381366], [126.937138, 37.381042], [126.937483, 37.380612], [126.937944, 37.380137], [126.938376, 37.379733], [126.938679, 37.379465], [126.938863, 37.379302], [126.939684, 37.378558], [126.940026, 37.37823], [126.940195, 37.378053], [126.940214, 37.378032], [126.940296, 37.377945], [126.940511, 37.377704], [126.940739, 37.377422], [126.940785, 37.37736], [126.940877, 37.377235], [126.940956, 37.377128], [126.941185, 37.376762], [126.940555, 37.376242], [126.940511, 37.376205], [126.940318, 37.376048], [126.940076, 37.375851], [126.939165, 37.376011], [126.937373, 37.376555], [126.934893, 37.376996], [126.932765, 37.37747], [126.930979, 37.377528], [126.926947, 37.377638], [126.924137, 37.377312], [126.923923, 37.377256], [126.921417, 37.376518], [126.919899, 37.376564], [126.919178, 37.376933], [126.91921, 37.377178], [126.919285, 37.377544], [126.919353, 37.377714], [126.919431, 37.377818], [126.920582, 37.379335], [126.921934, 37.380899], [126.924169, 37.383026], [126.925436, 37.384031], [126.925688, 37.384199], [126.925741, 37.384224], [126.92579, 37.384248], [126.932237, 37.385795], [126.93377, 37.383967], [126.933825, 37.383896], [126.936009, 37.383261]];
+const SUNGKYUL_CENTER = new kakao.maps.LatLng(37.382, 126.931);
+const MAX_BOUNDS_DISTANCE = 1800; // 성결대 중심 기준 반경 1.8km 이내로 이동 제한
 
 function initMap() {
     const container = document.getElementById('map');
-    const options = { center: new kakao.maps.LatLng(37.382, 126.931), level: 3 };
+    const options = { center: SUNGKYUL_CENTER, level: 3 };
     map = new kakao.maps.Map(container, options);
 
-    const path = boundaryCoords.map(c => new kakao.maps.LatLng(c[1], c[0]));
-    new kakao.maps.Polygon({
-        path: path, strokeWeight: 3, strokeColor: '#FF0000', strokeOpacity: 0.6,
-        fillColor: '#FF0000', fillOpacity: 0.05
-    }).setMap(map);
+    // 💡 지도 축소/확대 레벨 제한 (캠퍼스 생활권 내로 고정)
+    map.setMinLevel(1);
+    map.setMaxLevel(5);
+
+    // 💡 지도 이동 범위 제한 (캠퍼스 반경을 지나치게 벗어나면 중심으로 자동 복귀)
+    kakao.maps.event.addListener(map, 'dragend', function() {
+        const center = map.getCenter();
+        const dist = getDistance(37.382, 126.931, center.getLat(), center.getLng());
+        if (dist > MAX_BOUNDS_DISTANCE) {
+            map.panTo(SUNGKYUL_CENTER);
+        }
+    });
 }
 
 // 🌓 다크 모드 초기화 및 제어 기능
@@ -44,6 +53,74 @@ function initTheme() {
         localStorage.setItem('theme', isDark ? 'dark' : 'light');
         themeBtn.innerHTML = isDark ? '☀️' : '🌙';
     });
+}
+
+// ⚙️ 서비스 설정(길찾기 앱 선택, 마커 토글) 초기화 기능
+function initSettings() {
+    const modal = document.getElementById('settings-modal');
+    const btnSettings = document.getElementById('btn-settings');
+    const btnClose = document.getElementById('btn-close-settings');
+    const btnSave = document.getElementById('btn-save-settings');
+    const chkMarkers = document.getElementById('chk-markers');
+
+    if (!modal || !btnSettings || !btnClose || !btnSave || !chkMarkers) return;
+
+    // 1. 저장된 값 불러와 UI 매핑
+    const savedNaviPref = localStorage.getItem('navi-pref') || 'kakaomap';
+    const radio = document.querySelector(`input[name="navi-pref"][value="${savedNaviPref}"]`);
+    if (radio) radio.checked = true;
+
+    const savedShowMarkers = localStorage.getItem('show-markers') !== 'false';
+    showMarkers = savedShowMarkers;
+    chkMarkers.checked = showMarkers;
+
+    // 2. 이벤트 리스너 설정
+    btnSettings.addEventListener('click', () => {
+        modal.classList.add('open');
+    });
+
+    btnClose.addEventListener('click', () => {
+        modal.classList.remove('open');
+    });
+
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.classList.remove('open');
+    });
+
+    btnSave.addEventListener('click', () => {
+        // 길찾기 기본 앱 저장
+        const checkedRadio = document.querySelector('input[name="navi-pref"]:checked');
+        if (checkedRadio) {
+            localStorage.setItem('navi-pref', checkedRadio.value);
+        }
+
+        // 마커 표시 여부 저장
+        showMarkers = chkMarkers.checked;
+        localStorage.setItem('show-markers', showMarkers ? 'true' : 'false');
+        
+        // 지도 마커 즉시 업데이트
+        toggleMarkersVisibility();
+
+        modal.classList.remove('open');
+        alert("설정이 성공적으로 저장되었습니다! ⚙️");
+    });
+}
+
+// 마커 전체 표시/가리기 스위칭 기능
+function toggleMarkersVisibility() {
+    mapMarkers.forEach(marker => {
+        if (showMarkers) {
+            marker.setMap(map);
+        } else {
+            marker.setMap(null);
+        }
+    });
+
+    // 마커가 비활성화되면 현재 켜져 있는 툴팁 풍선도 가림
+    if (!showMarkers && activeTooltipOverlay) {
+        activeTooltipOverlay.setMap(null);
+        activeTooltipOverlay = null;
+    }
 }
 
 // 두 좌표 사이의 도보/직선 거리 계산 (Haversine 공식)
@@ -158,6 +235,10 @@ function renderList(data) {
     // 기존 맵 마커 지우기
     mapMarkers.forEach(marker => marker.setMap(null));
     mapMarkers = [];
+    if (activeTooltipOverlay) {
+        activeTooltipOverlay.setMap(null);
+        activeTooltipOverlay = null;
+    }
 
     data.forEach(item => {
         const card = document.createElement('div');
@@ -186,34 +267,70 @@ function renderList(data) {
                 <span class="rating-count">(${count})</span>
             </div>
             <div class="res-addr">${item.addr}</div>
+            <div class="res-card-footer">
+                <button class="route-link-btn">🚙 길찾기</button>
+            </div>
         `;
         
         card.onclick = () => focusOn(item, card);
         container.appendChild(card);
+
+        // 🚙 길찾기 버튼 바인딩
+        const routeBtn = card.querySelector('.route-link-btn');
+        if (routeBtn) {
+            routeBtn.addEventListener('click', (e) => {
+                goRoute(item, e);
+            });
+        }
 
         // 지도 위의 커스텀 핀 오버레이 마커 만들기
         const pos = new kakao.maps.LatLng(item.y, item.x);
         const markerEl = document.createElement('div');
         
         let pinClass = 'custom-overlay-pin';
-        let emoji = '📍';
-        if (item.food.includes('카페')) { pinClass += ' cafe'; emoji = '☕'; }
-        else if (item.food.includes('국수')) { pinClass += ' noodle'; emoji = '🍜'; }
-        else if (item.food.includes('중식')) { pinClass += ' chinese'; emoji = '🇨🇳'; }
-        else if (item.food.includes('분식') || item.food.includes('떡볶이')) { pinClass += ' noodle'; emoji = '🍢'; }
-        else if (item.food.includes('고기') || item.food.includes('삼겹살') || item.food.includes('닭') || item.food.includes('치킨')) { pinClass += ' meat'; emoji = '🥩'; }
-        else if (item.food.includes('술집') || item.food.includes('호프') || item.food.includes('주점')) { pinClass += ' pub'; emoji = '🍺'; }
+        let emoji = '🍽️';
+
+        const f = item.food;
+        if (f.includes('한식') || f.includes('백반') || f.includes('찌개') || f.includes('국밥')) {
+            pinClass += ' korean'; emoji = '🍚';
+        } else if (f.includes('중식') || f.includes('중화요리') || f.includes('짜장') || f.includes('짬뽕') || f.includes('마라')) {
+            pinClass += ' chinese'; emoji = '🇨🇳';
+        } else if (f.includes('일식') || f.includes('초밥') || f.includes('돈까스') || f.includes('카츠') || f.includes('라멘') || f.includes('스시')) {
+            pinClass += ' japanese'; emoji = '🍣';
+        } else if (f.includes('양식') || f.includes('파스타') || f.includes('피자') || f.includes('버거') || f.includes('스테이크')) {
+            pinClass += ' western'; emoji = '🍝';
+        } else if (f.includes('치킨') || f.includes('통닭')) {
+            pinClass += ' chicken'; emoji = '🍗';
+        } else if (f.includes('분식') || f.includes('떡볶이') || f.includes('김밥') || f.includes('순대')) {
+            pinClass += ' snack'; emoji = '🍢';
+        } else if (f.includes('고기') || f.includes('삼겹살') || f.includes('갈비') || f.includes('곱창') || f.includes('구이') || f.includes('육류')) {
+            pinClass += ' meat'; emoji = '🥩';
+        } else if (f.includes('국수') || f.includes('칼국수') || f.includes('냉면') || f.includes('우동') || f.includes('밀면')) {
+            pinClass += ' noodle'; emoji = '🍜';
+        } else if (f.includes('카페') || f.includes('커피') || f.includes('디저트') || f.includes('베이커리') || f.includes('빵')) {
+            pinClass += ' cafe'; emoji = '☕';
+        } else if (f.includes('술집') || f.includes('호프') || f.includes('주점') || f.includes('포차') || f.includes('맥주') || f.includes('와인') || f.includes('이자카야')) {
+            pinClass += ' pub'; emoji = '🍺';
+        } else if (f.includes('아시안') || f.includes('베트남') || f.includes('쌀국수') || f.includes('태국') || f.includes('인도')) {
+            pinClass += ' asian'; emoji = '🥟';
+        } else {
+            pinClass += ' general'; emoji = '🍽️';
+        }
 
         markerEl.className = pinClass;
-        markerEl.innerHTML = `${emoji} ${item.title}`;
+        markerEl.innerHTML = emoji; // 💡 마커 크기 단순화를 위해 이모지만 노출
 
         const overlayMarker = new kakao.maps.CustomOverlay({
             position: pos,
             content: markerEl,
-            yAnchor: 1.3
+            yAnchor: 0.5, // 원형이므로 중앙 정렬
+            xAnchor: 0.5
         });
         
-        overlayMarker.setMap(map);
+        // 설정 상태에 맞추어 맵 마커 표시
+        if (showMarkers) {
+            overlayMarker.setMap(map);
+        }
         mapMarkers.push(overlayMarker);
 
         // 데이터와 핀 매핑
@@ -227,6 +344,55 @@ function renderList(data) {
             card.scrollIntoView({ behavior: 'smooth', block: 'center' });
         });
     });
+}
+
+// 특정 맛집의 설정된 전용 길찾기 링크 실행
+function goRoute(item, event) {
+    if (event) event.stopPropagation();
+    
+    const pref = localStorage.getItem('navi-pref') || 'kakaomap';
+    
+    // 식당 이름에서 쉼표(,)를 제거하여 맵 API URL 파싱 에러 방지
+    const cleanTitle = item.title.replace(/,/g, ' ');
+    const encodedTitle = encodeURIComponent(cleanTitle);
+    
+    if (pref === 'kakaomap') {
+        // 카카오맵 외부 길찾기 웹용 링크 (위도, 경도 순)
+        const url = `https://map.kakao.com/link/to/${encodedTitle},${item.y},${item.x}`;
+        window.open(url, '_blank');
+    } else if (pref === 'kakaonavi') {
+        // 카카오내비 앱 실행용 SDK 스키마 (경도, 위도 순)
+        const appUrl = `kakaonavi-sdk://navigate?name=${encodedTitle}&coordType=WGS84&x=${item.x}&y=${item.y}`;
+        window.location.href = appUrl;
+        
+        // 모바일 브라우저 락 방지용 딜레이 폴백 (카카오맵 웹 길찾기로 연동)
+        setTimeout(() => {
+            const fallbackUrl = `https://map.kakao.com/link/to/${encodedTitle},${item.y},${item.x}`;
+            window.open(fallbackUrl, '_blank');
+        }, 1200);
+    } else if (pref === 'navermap') {
+        // 네이버 지도 앱/웹 크로스플랫폼 대응
+        // 1. 네이버 지도 웹용 v5 경로 (도착 좌표값에 COORD_POI 명시하여 목적지 자동 입력 처리)
+        const webUrl = `https://map.naver.com/v5/directions/-/-/${item.x},${item.y},${encodedTitle},,COORD_POI/-/transit`;
+        
+        // 2. 모바일 브라우저인 경우 네이버 지도 앱 호출 시도
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        if (isMobile) {
+            // 네이버 지도 앱 전용 스키마 실행 (도보 길찾기)
+            // 하위 호환성(dlat/dlng/dname) 및 신버전 규격(elat/elng/ename) 파라미터를 동시에 넘겨서 모든 버전의 네이버 지도 앱에 대응합니다.
+            const appUrl = `nmap://route/walk?dlat=${item.y}&dlng=${item.x}&dname=${encodedTitle}&elat=${item.y}&elng=${item.x}&ename=${encodedTitle}&appname=skueat`;
+            window.location.href = appUrl;
+            
+            // 앱이 미설치되었거나 구동 실패 시 웹페이지로 대체 로딩
+            setTimeout(() => {
+                window.open(webUrl, '_blank');
+            }, 1200);
+        } else {
+            // PC 환경은 바로 v5 웹 브라우저 화면 오픈
+            window.open(webUrl, '_blank');
+        }
+    }
 }
 
 // 특정 식당의 리뷰 불러오기
@@ -349,6 +515,25 @@ function focusOn(item, cardElement) {
     const pos = new kakao.maps.LatLng(item.y, item.x);
     map.setLevel(2); // 지도를 디테일하게 줌인 (기본 3에서 2로 줌인 최적화)
     map.panTo(pos);
+
+    // 💡 식당 이름 툴팁 오버레이 띄우기 (마커 온 상태일때만)
+    if (activeTooltipOverlay) {
+        activeTooltipOverlay.setMap(null);
+        activeTooltipOverlay = null;
+    }
+    
+    if (showMarkers) {
+        const tooltipEl = document.createElement('div');
+        tooltipEl.className = 'pin-name-tooltip';
+        tooltipEl.textContent = item.title;
+
+        activeTooltipOverlay = new kakao.maps.CustomOverlay({
+            position: pos,
+            content: tooltipEl,
+            yAnchor: 2.1
+        });
+        activeTooltipOverlay.setMap(map);
+    }
 
     // 3. 한 줄 평 레이아웃 생성 및 마운트
     const reviewsSec = document.createElement('div');
@@ -481,6 +666,23 @@ function resetRoulette() {
 function runRouletteAnimation() {
     if (isRouletteRunning || currentRestaurants.length === 0) return;
     
+    // 💡 카페/술집 제외 옵션 필터링
+    let candidates = [...currentRestaurants];
+    const excludeCafe = document.getElementById('chk-roulette-exclude-cafe')?.checked;
+    const excludePub = document.getElementById('chk-roulette-exclude-pub')?.checked;
+
+    if (excludeCafe) {
+        candidates = candidates.filter(item => !item.food.includes('카페') && !item.food.includes('커피') && !item.food.includes('디저트'));
+    }
+    if (excludePub) {
+        candidates = candidates.filter(item => !item.food.includes('술집') && !item.food.includes('호프') && !item.food.includes('주점') && !item.food.includes('포차'));
+    }
+
+    if (candidates.length === 0) {
+        alert("선택한 조건에 맞는 음식점이 없습니다! 제외 옵션을 해제해 주세요.");
+        return;
+    }
+
     isRouletteRunning = true;
     
     const startBtn = document.getElementById('btn-start-roulette');
@@ -491,15 +693,15 @@ function runRouletteAnimation() {
     if (resultBox) resultBox.classList.remove('show');
 
     // 1. 당첨 맛집 선정
-    const winnerIndex = Math.floor(Math.random() * currentRestaurants.length);
-    const winner = currentRestaurants[winnerIndex];
+    const winnerIndex = Math.floor(Math.random() * candidates.length);
+    const winner = candidates[winnerIndex];
 
     // 2. 흐르는 애니메이션을 위한 아이템 어레이 조립 (30개 배치)
     const totalItems = 30;
     const rouletteItems = [];
     
     for (let i = 0; i < totalItems - 1; i++) {
-        const randItem = currentRestaurants[Math.floor(Math.random() * currentRestaurants.length)];
+        const randItem = candidates[Math.floor(Math.random() * candidates.length)];
         rouletteItems.push(randItem.title);
     }
     // 마지막에 당첨 항목을 주입하여 이곳에 정확히 멈추게 함
@@ -514,7 +716,7 @@ function runRouletteAnimation() {
 
     // 3. 룰렛 회전 애니메이션 시작 (3.2초간 가속/감속 커브 적용)
     inner.style.transition = 'transform 3.2s cubic-bezier(0.1, 0.8, 0.1, 1)';
-    inner.style.transform = `translateY(-${(totalItems - 1) * 100}px)`;
+    inner.style.transform = `translateY(-${(totalItems - 1) * 80}px)`;
 
     // 4. 애니메이션 종료 후 처리
     setTimeout(() => {
@@ -604,6 +806,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchData();
     initBottomSheet();
     initRoulette();   // 🎲 룰렛 모달 활성화
+    initSettings();   // ⚙️ 서비스 설정 모달 활성화
 
     // 검색어 입력
     document.getElementById('search-input').addEventListener('keyup', (e) => {

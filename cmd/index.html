@@ -3,7 +3,8 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>skueat - 성결대 맛집 가이드</title>
+    <title>skueat</title>
+    <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
     
     <link rel="stylesheet" href="/static/style.css">
     
@@ -14,9 +15,13 @@
 <div class="app-container">
     <header class="header">
         <div class="top-bar">
-            <div class="logo">skueat</div>
+            <div class="logo">
+                <img src="/static/logo.svg" alt="skueat logo" class="logo-img">
+                <span>skueat</span>
+            </div>
             <div class="top-bar-right">
                 <button id="btn-theme" class="theme-toggle-btn" title="테마 변경">🌓</button>
+                <button id="btn-settings" class="settings-toggle-btn" title="설정">⚙️</button>
                 <div id="auth-area">
                     {{if .IsLoggedIn}}
                     <div class="user-info">
@@ -40,13 +45,16 @@
         
         <nav class="category-scroll" id="category-nav">
             <button class="cat-btn active" data-category="all">전체</button>
-            <button class="cat-btn" data-category="국수">🍜 국수</button>
+            <button class="cat-btn" data-category="한식">🍚 한식</button>
             <button class="cat-btn" data-category="중식">🇨🇳 중식</button>
+            <button class="cat-btn" data-category="일식">🍣 일식</button>
+            <button class="cat-btn" data-category="양식">🍝 양식</button>
+            <button class="cat-btn" data-category="치킨">🍗 치킨</button>
             <button class="cat-btn" data-category="분식">🍢 분식</button>
             <button class="cat-btn" data-category="고기">🥩 고기</button>
-            <button class="cat-btn" data-category="치킨">🍗 치킨</button>
-            <button class="cat-btn" data-category="술집">🍺 술집</button>
+            <button class="cat-btn" data-category="국수">🍜 국수</button>
             <button class="cat-btn" data-category="카페">☕ 카페</button>
+            <button class="cat-btn" data-category="술집">🍺 술집</button>
         </nav>
     </header>
 
@@ -69,6 +77,16 @@
     <div class="modal-content">
         <span class="modal-close" id="btn-close-roulette">&times;</span>
         <h2 class="roulette-modal-title">🎲 오늘의 추천 맛집은?</h2>
+        <div class="roulette-options">
+            <label class="roulette-chk-label">
+                <input type="checkbox" id="chk-roulette-exclude-cafe" checked>
+                ☕ 카페 제외
+            </label>
+            <label class="roulette-chk-label">
+                <input type="checkbox" id="chk-roulette-exclude-pub" checked>
+                🍺 술집 제외
+            </label>
+        </div>
         <div class="roulette-container">
             <div class="roulette-box" id="roulette-box">
                 <div class="roulette-inner" id="roulette-inner">
@@ -78,6 +96,39 @@
         </div>
         <button class="roulette-start-btn" id="btn-start-roulette">START!</button>
         <div class="roulette-result" id="roulette-result"></div>
+    </div>
+</div>
+
+<!-- ⚙️ 설정 모달 -->
+<div id="settings-modal" class="modal-overlay">
+    <div class="modal-content">
+        <span class="modal-close" id="btn-close-settings">&times;</span>
+        <h2 class="settings-modal-title">⚙️ 서비스 설정</h2>
+        
+        <div class="settings-group">
+            <label class="settings-label">🚙 기본 길찾기 앱</label>
+            <div class="radio-group">
+                <label class="radio-label">
+                    <input type="radio" name="navi-pref" value="kakaomap" checked> 카카오맵
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="navi-pref" value="kakaonavi"> 카카오내비
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="navi-pref" value="navermap"> 네이버 지도
+                </label>
+            </div>
+        </div>
+
+        <div class="settings-group toggle-row">
+            <label class="settings-label">📍 지도 마커 표시</label>
+            <label class="switch">
+                <input type="checkbox" id="chk-markers" checked>
+                <span class="slider round"></span>
+            </label>
+        </div>
+        
+        <button class="settings-save-btn" id="btn-save-settings">저장 완료</button>
     </div>
 </div>
 

@@ -639,12 +639,28 @@ function focusOn(item, cardElement) {
 
 // 모바일 하단 네비게이션 바텀시트 확장 제어 함수
 function expandBottomSheet(targetPercent = 70) {
-    if (window.innerWidth > 768) return;
     const sheet = document.getElementById('bottom-sheet');
     if (!sheet) return;
 
-    sheet.style.transition = 'height 0.3s cubic-bezier(0.2, 0.9, 0.3, 1)';
-    sheet.style.height = `${targetPercent}%`;
+    // 미디어쿼리가 모바일 바텀시트 모드인지 계산된 스타일 또는 미디어쿼리로 정확히 확인
+    const isMobileSheet = window.innerWidth <= 768 || window.matchMedia('(max-width: 768px)').matches || window.getComputedStyle(sheet).position === 'absolute';
+    if (!isMobileSheet) return;
+
+    const mainContent = document.querySelector('.main-content');
+    sheet.style.transition = 'height 0.35s cubic-bezier(0.2, 0.9, 0.3, 1)';
+    
+    if (mainContent) {
+        const mainHeight = mainContent.getBoundingClientRect().height;
+        const targetPx = Math.round(mainHeight * (targetPercent / 100));
+        sheet.style.height = `${targetPx}px`;
+    } else {
+        sheet.style.height = `${targetPercent}%`;
+    }
+
+    // 목록 스크롤을 맨 위로 올려서 검색 결과가 즉시 첫 항목부터 보이게 함
+    const listContainer = document.getElementById('res-list');
+    if (listContainer) listContainer.scrollTop = 0;
+    sheet.scrollTop = 0;
 }
 
 function applyFilter(category, btn) {
@@ -652,12 +668,13 @@ function applyFilter(category, btn) {
     btn.classList.add('active');
 
     // 모바일에서 바텀시트가 너무 작거나 접혀있으면 목록을 볼 수 있도록 55%로 확장
-    if (window.innerWidth <= 768) {
-        const sheet = document.getElementById('bottom-sheet');
-        const mainContent = document.querySelector('.main-content');
-        if (sheet && mainContent) {
+    const sheet = document.getElementById('bottom-sheet');
+    if (sheet) {
+        const isMobileSheet = window.innerWidth <= 768 || window.matchMedia('(max-width: 768px)').matches || window.getComputedStyle(sheet).position === 'absolute';
+        if (isMobileSheet) {
+            const mainContent = document.querySelector('.main-content');
+            const mainHeight = mainContent ? mainContent.getBoundingClientRect().height : window.innerHeight;
             const currentHeight = sheet.getBoundingClientRect().height;
-            const mainHeight = mainContent.getBoundingClientRect().height;
             if (currentHeight < mainHeight * 0.4) {
                 expandBottomSheet(55);
             }
@@ -678,7 +695,8 @@ function applySearch() {
     // 💡 모바일에서 검색 시 자동으로 하단 네비게이션 바텀시트를 올려 바로 목록 확인 가능하게 처리
     expandBottomSheet(70);
 
-    fetchData(category === 'all' ? 'all' : category, input ? input.value : '');
+    const keyword = input ? input.value.trim() : '';
+    fetchData(category === 'all' ? 'all' : category, keyword);
 }
 
 // 🎲 룰렛 제어 및 초기 설정
@@ -875,15 +893,42 @@ document.addEventListener('DOMContentLoaded', () => {
     initRoulette();   // 🎲 룰렛 모달 활성화
     initSettings();   // ⚙️ 서비스 설정 모달 활성화
 
-    // 검색어 입력 (Enter)
-    document.getElementById('search-input').addEventListener('keyup', (e) => {
-        if (e.key === 'Enter') applySearch();
-    });
+    // 검색 폼 제출 (Enter키 및 모바일 키보드 검색 버튼 완벽 지원)
+    const searchForm = document.getElementById('search-form');
+    if (searchForm) {
+        searchForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            applySearch();
+        });
+    }
 
-    // 🔍 검색 버튼 클릭 바인딩
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) {
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                applySearch();
+            }
+        });
+    }
+
+    // 🔍 검색 버튼 클릭 및 터치 바인딩 (모바일 터치 씹힘 방지)
     const searchBtn = document.getElementById('btn-search');
     if (searchBtn) {
-        searchBtn.addEventListener('click', applySearch);
+        let lastSearchTrigger = 0;
+        const handleSearchTrigger = (e) => {
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            const now = Date.now();
+            if (now - lastSearchTrigger < 300) return;
+            lastSearchTrigger = now;
+            applySearch();
+        };
+
+        searchBtn.addEventListener('click', handleSearchTrigger);
+        searchBtn.addEventListener('touchend', handleSearchTrigger);
     }
 
     // GPS 위치 검색 버튼 바인딩

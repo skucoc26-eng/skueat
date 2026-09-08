@@ -6,7 +6,7 @@
     <title>skueat</title>
     <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
     
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=3">
     
     <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey={{.ApiKey}}&libraries=services"></script>
 </head>
@@ -37,12 +37,12 @@
             </div>
         </div>
         
-        <div class="search-row">
-            <input type="text" id="search-input" placeholder="맛집 또는 메뉴 검색">
-            <button class="btn-search" id="btn-search" title="검색">🔍</button>
-            <button class="btn-gps" id="btn-gps" title="내 위치 찾기">📍</button>
-            <button class="btn-random" id="btn-random" title="랜덤 추천">🎲</button>
-        </div>
+        <form class="search-row" id="search-form" action="javascript:void(0);">
+            <input type="search" id="search-input" placeholder="맛집 또는 메뉴 검색" autocomplete="off" enterkeyhint="search">
+            <button type="submit" class="btn-search" id="btn-search" title="검색">🔍</button>
+            <button type="button" class="btn-gps" id="btn-gps" title="내 위치 찾기">📍</button>
+            <button type="button" class="btn-random" id="btn-random" title="랜덤 추천">🎲</button>
+        </form>
         
         <nav class="category-scroll" id="category-nav">
             <button class="cat-btn active" data-category="all">전체</button>
@@ -137,7 +137,7 @@
     const IS_LOGGED_IN = "{{if .IsLoggedIn}}true{{else}}false{{end}}" === "true";
 </script>
 
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v=3"></script>
 
 </body>
 </html>

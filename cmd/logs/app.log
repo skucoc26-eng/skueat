@@ -1,0 +1,279 @@
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+INFO  app started
+[GIN-debug] GET    /static/*filepath         --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (4 handlers)
+[GIN-debug] HEAD   /static/*filepath         --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (4 handlers)
+[GIN-debug] Loaded HTML Templates (2): 
+	- 
+	- index.html
+
+[GIN-debug] GET    /                         --> main.main.func2 (4 handlers)
+[GIN-debug] GET    /api/restaurants          --> main.main.func3 (4 handlers)
+[GIN-debug] GET    /api/restaurants/random   --> main.main.func4 (4 handlers)
+[GIN-debug] GET    /login/kakao              --> main.main.func5 (4 handlers)
+[GIN-debug] GET    /auth/kakao/callback      --> main.main.func6 (4 handlers)
+[GIN-debug] POST   /api/rate                 --> main.main.func7 (4 handlers)
+[GIN-debug] GET    /api/reviews              --> main.main.func8 (4 handlers)
+[GIN-debug] GET    /logout                   --> main.main.func9 (4 handlers)
+INFO  server listening on 0.0.0.0:8080
+[GIN-debug] [WARNING] You trusted all proxies, this is NOT safe. We recommend you to set a value.
+Please check https://github.com/gin-gonic/gin/blob/master/docs/doc.md#dont-trust-all-proxies for details.
+[GIN-debug] Listening and serving HTTP on 0.0.0.0:8080
+INFO  [200] GET / (27.5519ms)
+INFO  [200] GET /static/style.css (212.9401ms)
+INFO  [200] GET /static/app.js (199.2845ms)
+WARN  [404] GET /favicon.ico (0s)
+INFO  [200] GET / (26.1441ms)
+INFO  [304] GET /static/app.js (52.372ms)
+INFO  [304] GET /static/style.css (49.1806ms)
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+INFO  app started
+[GIN-debug] GET    /static/*filepath         --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (4 handlers)
+[GIN-debug] HEAD   /static/*filepath         --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (4 handlers)
+[GIN-debug] Loaded HTML Templates (2): 
+	- 
+	- index.html
+
+[GIN-debug] GET    /                         --> main.main.func2 (4 handlers)
+[GIN-debug] GET    /api/restaurants          --> main.main.func3 (4 handlers)
+[GIN-debug] GET    /api/restaurants/random   --> main.main.func4 (4 handlers)
+[GIN-debug] GET    /login/kakao              --> main.main.func5 (4 handlers)
+[GIN-debug] GET    /auth/kakao/callback      --> main.main.func6 (4 handlers)
+[GIN-debug] POST   /api/rate                 --> main.main.func7 (4 handlers)
+[GIN-debug] GET    /api/reviews              --> main.main.func8 (4 handlers)
+[GIN-debug] GET    /logout                   --> main.main.func9 (4 handlers)
+INFO  server listening on 0.0.0.0:8080
+[GIN-debug] [WARNING] You trusted all proxies, this is NOT safe. We recommend you to set a value.
+Please check https://github.com/gin-gonic/gin/blob/master/docs/doc.md#dont-trust-all-proxies for details.
+[GIN-debug] Listening and serving HTTP on 0.0.0.0:8080
+INFO  [200] GET / (18.5928ms)
+INFO  [304] GET /static/app.js (62.8638ms)
+INFO  [304] GET /static/style.css (45.7067ms)
+INFO  [200] GET /api/restaurants?category=all&search= (8.3571ms)
+INFO  [200] GET /api/restaurants?category=%EA%B5%AD%EC%88%98&search= (3.2548ms)
+INFO  [200] GET /api/restaurants?category=%EC%A4%91%EC%8B%9D&search= (4.3605ms)
+INFO  [200] GET /api/restaurants?category=%EB%B6%84%EC%8B%9D&search= (6.0532ms)
+INFO  [200] GET /api/restaurants?category=%EA%B3%A0%EA%B8%B0&search= (6.8449ms)
+INFO  [200] GET /api/reviews?restaurant_id=44 (6.1631ms)
+INFO  [302] GET /login/kakao (0s)
+INFO  [302] GET /login/kakao (0s)
+INFO  [302] GET /login/kakao (1.0028ms)
+INFO  [302] GET /login/kakao (0s)
+INFO  [302] GET /login/kakao (0s)
+INFO  [200] GET / (26.3578ms)
+INFO  [304] GET /static/app.js (83.3258ms)
+INFO  [304] GET /static/style.css (57.1707ms)
+INFO  [200] GET /api/restaurants?category=all&search= (9.2056ms)
+INFO  [302] GET /login/kakao (0s)
+INFO  [302] GET /login/kakao (0s)
+INFO  [302] GET /auth/kakao/callback?code=iZzV34lEtN_9o5KddeSiqm47MX3jZ0-mWAV7p26Tk26uq4IgF035lAAAAAQKFxKWAAABn9u5v7Iq3eF1vjqPRg (1.4350866s)
+INFO  [302] GET /auth/kakao/callback?code=nXtXmRQelnXoFnKPFnnbV4ql1vRwIki5agOg1JbZaGqKn74o-Pbq0QAAAAQKFxJVAAABn9u5xG_OkqTnJF629A (220.3586ms)
+INFO  [200] GET / (27.4934ms)
+INFO  [200] GET /api/restaurants?category=all&search= (17.9465ms)
+INFO  [200] GET / (51.5607ms)
+INFO  [200] GET /static/style.css (279.8732ms)
+INFO  [200] GET /static/app.js (323.6958ms)
+INFO  [200] GET /api/restaurants?category=all&search= (8.0916ms)
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+INFO  app started
+[GIN-debug] GET    /static/*filepath         --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (4 handlers)
+[GIN-debug] HEAD   /static/*filepath         --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (4 handlers)
+[GIN-debug] Loaded HTML Templates (2): 
+	- 
+	- index.html
+
+[GIN-debug] GET    /                         --> main.main.func2 (4 handlers)
+[GIN-debug] GET    /api/restaurants          --> main.main.func3 (4 handlers)
+[GIN-debug] GET    /api/restaurants/random   --> main.main.func4 (4 handlers)
+[GIN-debug] GET    /login/kakao              --> main.main.func5 (4 handlers)
+[GIN-debug] GET    /auth/kakao/callback      --> main.main.func6 (4 handlers)
+[GIN-debug] POST   /api/rate                 --> main.main.func7 (4 handlers)
+[GIN-debug] GET    /api/reviews              --> main.main.func8 (4 handlers)
+[GIN-debug] GET    /logout                   --> main.main.func9 (4 handlers)
+INFO  server listening on 0.0.0.0:8080
+[GIN-debug] [WARNING] You trusted all proxies, this is NOT safe. We recommend you to set a value.
+Please check https://github.com/gin-gonic/gin/blob/master/docs/doc.md#dont-trust-all-proxies for details.
+[GIN-debug] Listening and serving HTTP on 0.0.0.0:8080
+INFO  [200] GET / (16.6866ms)
+INFO  [304] GET /static/app.js (51.6152ms)
+INFO  [304] GET /static/style.css (37.9719ms)
+INFO  [200] GET /api/restaurants?category=all&search= (8.9207ms)
+INFO  [200] GET / (12.439ms)
+INFO  [304] GET /static/app.js (50.816ms)
+INFO  [200] GET /static/style.css (297.9028ms)
+INFO  [200] GET /api/restaurants?category=all&search= (4.3071ms)
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+INFO  app started
+[GIN-debug] GET    /static/*filepath         --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (4 handlers)
+[GIN-debug] HEAD   /static/*filepath         --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (4 handlers)
+[GIN-debug] Loaded HTML Templates (2): 
+	- 
+	- index.html
+
+[GIN-debug] GET    /                         --> main.main.func2 (4 handlers)
+[GIN-debug] GET    /api/restaurants          --> main.main.func3 (4 handlers)
+[GIN-debug] GET    /api/restaurants/random   --> main.main.func4 (4 handlers)
+[GIN-debug] GET    /login/kakao              --> main.main.func5 (4 handlers)
+[GIN-debug] GET    /auth/kakao/callback      --> main.main.func6 (4 handlers)
+[GIN-debug] POST   /api/rate                 --> main.main.func7 (4 handlers)
+[GIN-debug] GET    /api/reviews              --> main.main.func8 (4 handlers)
+[GIN-debug] GET    /logout                   --> main.main.func9 (4 handlers)
+INFO  server listening on 0.0.0.0:8080
+[GIN-debug] [WARNING] You trusted all proxies, this is NOT safe. We recommend you to set a value.
+Please check https://github.com/gin-gonic/gin/blob/master/docs/doc.md#dont-trust-all-proxies for details.
+[GIN-debug] Listening and serving HTTP on 0.0.0.0:8080
+INFO  [200] GET / (36.5544ms)
+INFO  [304] GET /static/app.js (85.1827ms)
+INFO  [304] GET /static/style.css (67.2893ms)
+INFO  [200] GET /api/restaurants?category=all&search= (12.0667ms)
+INFO  [200] GET / (33.7084ms)
+INFO  [200] GET /api/restaurants?category=all&search= (9.5479ms)
+INFO  [200] GET /api/reviews?restaurant_id=62 (9.337ms)
+INFO  [200] GET /api/reviews?restaurant_id=61 (6.0323ms)
+INFO  [200] GET /api/reviews?restaurant_id=60 (7.4527ms)
+INFO  [200] GET /api/reviews?restaurant_id=59 (7.3533ms)
+INFO  [200] GET /api/reviews?restaurant_id=56 (7.9479ms)
+INFO  [200] GET /api/restaurants?category=%EC%88%A0%EC%A7%91&search= (6.328ms)
+INFO  [200] GET /api/restaurants?category=%EC%B9%B4%ED%8E%98&search= (6.5364ms)
+INFO  [200] GET /api/restaurants?category=%EC%B9%98%ED%82%A8&search= (6.0993ms)
+INFO  [200] GET /api/restaurants?category=%EC%B9%98%ED%82%A8&search=%EA%B0%80%EB%A7%88%EC%B9%98 (9.7905ms)
+INFO  [200] GET /api/restaurants?category=all&search=%EA%B0%80%EB%A7%88%EC%B9%98 (10.3398ms)
+INFO  [200] GET /api/restaurants?category=all&search= (7.711ms)
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+restaurants.json 으로부터 225개의 맛집 데이터를 성공적으로 로드했습니다!
+INFO  app started
+[GIN-debug] GET    /static/*filepath         --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (4 handlers)
+[GIN-debug] HEAD   /static/*filepath         --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (4 handlers)
+[GIN-debug] Loaded HTML Templates (2): 
+	- 
+	- index.html
+
+[GIN-debug] GET    /                         --> main.main.func2 (4 handlers)
+[GIN-debug] GET    /api/restaurants          --> main.main.func3 (4 handlers)
+[GIN-debug] GET    /api/restaurants/random   --> main.main.func4 (4 handlers)
+[GIN-debug] GET    /login/kakao              --> main.main.func5 (4 handlers)
+[GIN-debug] GET    /auth/kakao/callback      --> main.main.func6 (4 handlers)
+[GIN-debug] POST   /api/rate                 --> main.main.func7 (4 handlers)
+[GIN-debug] GET    /api/reviews              --> main.main.func8 (4 handlers)
+[GIN-debug] GET    /logout                   --> main.main.func9 (4 handlers)
+INFO  server listening on 0.0.0.0:8080
+[GIN-debug] [WARNING] You trusted all proxies, this is NOT safe. We recommend you to set a value.
+Please check https://github.com/gin-gonic/gin/blob/master/docs/doc.md#dont-trust-all-proxies for details.
+[GIN-debug] Listening and serving HTTP on 0.0.0.0:8080
+INFO  [200] GET / (19.6577ms)
+INFO  [304] GET /static/app.js (22.0569ms)
+INFO  [304] GET /static/style.css (17.5388ms)
+INFO  [200] GET /api/restaurants?category=all&search= (11.091ms)
+INFO  [200] GET /api/reviews?restaurant_id=27 (10.6597ms)
+INFO  [200] GET /api/restaurants?category=%EA%B5%AD%EC%88%98&search= (4.876ms)
+INFO  [200] GET /api/restaurants?category=%EC%A4%91%EC%8B%9D&search= (6.8934ms)
+INFO  [200] GET /api/restaurants?category=%EA%B5%AD%EC%88%98&search= (8.4873ms)
+INFO  [200] GET /api/restaurants?category=all&search= (10.4144ms)
+INFO  [200] GET /api/reviews?restaurant_id=154 (7.6037ms)
+INFO  [200] GET /api/restaurants?category=%EA%B3%A0%EA%B8%B0&search= (9.7843ms)
+INFO  [200] GET /api/restaurants?category=all&search= (10.0186ms)
+INFO  [200] GET / (33.5649ms)
+INFO  [200] GET /static/app.js (168.3054ms)
+INFO  [200] GET /static/style.css (176.8111ms)
+INFO  [200] GET /api/restaurants?category=all&search= (7.9271ms)
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+INFO  app started
+[GIN-debug] GET    /static/*filepath         --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (4 handlers)
+[GIN-debug] HEAD   /static/*filepath         --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (4 handlers)
+[GIN-debug] Loaded HTML Templates (2): 
+	- 
+	- index.html
+
+[GIN-debug] GET    /                         --> main.main.func2 (4 handlers)
+[GIN-debug] GET    /api/restaurants          --> main.main.func3 (4 handlers)
+[GIN-debug] GET    /api/restaurants/random   --> main.main.func4 (4 handlers)
+[GIN-debug] GET    /login/kakao              --> main.main.func5 (4 handlers)
+[GIN-debug] GET    /auth/kakao/callback      --> main.main.func6 (4 handlers)
+[GIN-debug] POST   /api/rate                 --> main.main.func7 (4 handlers)
+[GIN-debug] GET    /api/reviews              --> main.main.func8 (4 handlers)
+[GIN-debug] GET    /logout                   --> main.main.func9 (4 handlers)
+INFO  server listening on 0.0.0.0:8080
+[GIN-debug] [WARNING] You trusted all proxies, this is NOT safe. We recommend you to set a value.
+Please check https://github.com/gin-gonic/gin/blob/master/docs/doc.md#dont-trust-all-proxies for details.
+[GIN-debug] Listening and serving HTTP on 0.0.0.0:8080
+INFO  [200] GET / (19.1707ms)
+INFO  [304] GET /static/app.js (27.9604ms)
+INFO  [304] GET /static/style.css (22.5853ms)
+INFO  [200] GET /api/restaurants?category=all&search= (18.3224ms)
+INFO  [200] GET /api/restaurants?category=%EA%B5%AD%EC%88%98&search= (34.9339ms)
+INFO  [200] GET /api/restaurants?category=%EA%B5%AD%EC%88%98&search= (7.4665ms)
+INFO  [200] GET /api/restaurants?category=all&search= (8.7019ms)
+INFO  [200] GET /api/restaurants?category=%EA%B5%AD%EC%88%98&search= (7.2293ms)
+INFO  [200] GET /api/restaurants?category=all&search= (14.5094ms)
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+restaurants.json 으로부터 226개의 맛집 데이터를 성공적으로 로드했습니다!
+INFO  app started
+[GIN-debug] GET    /static/*filepath         --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (4 handlers)
+[GIN-debug] HEAD   /static/*filepath         --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (4 handlers)
+[GIN-debug] Loaded HTML Templates (2): 
+	- 
+	- index.html
+
+[GIN-debug] GET    /                         --> main.main.func2 (4 handlers)
+[GIN-debug] GET    /api/restaurants          --> main.main.func3 (4 handlers)
+[GIN-debug] GET    /api/restaurants/random   --> main.main.func4 (4 handlers)
+[GIN-debug] GET    /login/kakao              --> main.main.func5 (4 handlers)
+[GIN-debug] GET    /auth/kakao/callback      --> main.main.func6 (4 handlers)
+[GIN-debug] POST   /api/rate                 --> main.main.func7 (4 handlers)
+[GIN-debug] GET    /api/reviews              --> main.main.func8 (4 handlers)
+[GIN-debug] GET    /logout                   --> main.main.func9 (4 handlers)
+INFO  server listening on 0.0.0.0:8080
+[GIN-debug] [WARNING] You trusted all proxies, this is NOT safe. We recommend you to set a value.
+Please check https://github.com/gin-gonic/gin/blob/master/docs/doc.md#dont-trust-all-proxies for details.
+[GIN-debug] Listening and serving HTTP on 0.0.0.0:8080
+INFO  [200] GET / (15.8799ms)
+INFO  [304] GET /static/app.js (22.8692ms)
+INFO  [304] GET /static/style.css (20.6598ms)
+INFO  [200] GET /api/restaurants?category=all&search= (7.9853ms)
+INFO  [200] GET /api/restaurants?category=%EA%B5%AD%EC%88%98&search= (4.5501ms)
+INFO  [200] GET /api/reviews?restaurant_id=226 (8.5697ms)
+INFO  [200] POST /api/rate (495.9967ms)
+INFO  [200] GET /api/reviews?restaurant_id=226 (7.5609ms)
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+INFO  app started
+[GIN-debug] GET    /static/*filepath         --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (4 handlers)
+[GIN-debug] HEAD   /static/*filepath         --> github.com/gin-gonic/gin.(*RouterGroup).createStaticHandler.func1 (4 handlers)
+[GIN-debug] Loaded HTML Templates (2): 
+	- 
+	- index.html
+
+[GIN-debug] GET    /                         --> main.main.func2 (4 handlers)
+[GIN-debug] GET    /api/restaurants          --> main.main.func3 (4 handlers)
+[GIN-debug] GET    /api/restaurants/random   --> main.main.func4 (4 handlers)
+[GIN-debug] GET    /login/kakao              --> main.main.func5 (4 handlers)
+[GIN-debug] GET    /auth/kakao/callback      --> main.main.func6 (4 handlers)
+[GIN-debug] POST   /api/rate                 --> main.main.func7 (4 handlers)
+[GIN-debug] GET    /api/reviews              --> main.main.func8 (4 handlers)
+[GIN-debug] GET    /logout                   --> main.main.func9 (4 handlers)
+INFO  server listening on 0.0.0.0:8080
+[GIN-debug] [WARNING] You trusted all proxies, this is NOT safe. We recommend you to set a value.
+Please check https://github.com/gin-gonic/gin/blob/master/docs/doc.md#dont-trust-all-proxies for details.
+[GIN-debug] Listening and serving HTTP on 0.0.0.0:8080

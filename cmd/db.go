@@ -29,6 +29,7 @@ type Rating struct {
 	gorm.Model
 	RestaurantID uint   `json:"restaurant_id"`
 	UserID       string `json:"user_id"` // 카카오 고유 ID
+	AuthorName   string `json:"author_name"` // 화면에 표시될 닉네임(마스킹, 익명 등)
 	Score        int    `json:"score"`
 	Comment      string `json:"comment" gorm:"type:text"` // 한 줄 평
 }

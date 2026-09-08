@@ -412,9 +412,10 @@ async function loadReviews(resId, listContainer) {
             item.className = 'review-item';
             
             const stars = '★'.repeat(rev.score) + '☆'.repeat(5 - rev.score);
+            const displayName = rev.author_name || rev.user_id || '익명';
             item.innerHTML = `
                 <div class="review-item-header">
-                    <span class="review-user">${rev.user_id}</span>
+                    <span class="review-user">${displayName}</span>
                     <span class="review-stars">${stars}</span>
                 </div>
                 <div class="review-text">${rev.comment || '별점만 남겼습니다.'}</div>
@@ -433,10 +434,17 @@ async function submitComment(resId, form, reviewsList, item) {
     const commentInput = form.querySelector('.review-comment-input');
     const comment = commentInput.value.trim();
 
+    const activeChip = form.querySelector('.author-chip.active');
+    const authorType = activeChip ? activeChip.dataset.type : 'masked';
+    const customInput = form.querySelector('.custom-nickname-input');
+    const customName = customInput ? customInput.value.trim() : '';
+
     const formData = new URLSearchParams();
     formData.append('restaurant_id', resId);
     formData.append('score', score);
     formData.append('comment', comment);
+    formData.append('author_type', authorType);
+    formData.append('custom_name', customName);
 
     try {
         const response = await fetch('/api/rate', {
@@ -569,11 +577,38 @@ function focusOn(item, cardElement) {
                     <span class="star-picker-star active" data-score="5" onclick="setFormScore(this, 5)">★</span>
                 </div>
             </div>
+            <div class="author-selector-row">
+                <div class="author-selector-title">👤 작성자 표기:</div>
+                <div class="author-type-chips">
+                    <span class="author-chip active" data-type="masked" title="이름 마스킹 (예: 홍*동)">🛡️ 마스킹</span>
+                    <span class="author-chip" data-type="anon" title="완전 익명 표기">🎭 익명</span>
+                    <span class="author-chip" data-type="custom" title="원하는 닉네임 직접 입력">✏️ 닉네임</span>
+                    <span class="author-chip" data-type="real" title="카카오 이름 그대로 표기">💬 카카오 이름</span>
+                </div>
+                <input type="text" class="custom-nickname-input" placeholder="원하는 닉네임을 입력하세요 (최대 10자)" maxlength="10">
+            </div>
             <div class="review-input-row">
                 <input type="text" placeholder="한 줄 평을 남겨보세요! (최대 50자)" class="review-comment-input" required maxlength="50">
                 <button type="submit" class="review-submit-btn">등록</button>
             </div>
         `;
+
+        // 닉네임 표기 칩 선택 이벤트
+        const chips = form.querySelectorAll('.author-chip');
+        const customInput = form.querySelector('.custom-nickname-input');
+        chips.forEach(chip => {
+            chip.addEventListener('click', () => {
+                chips.forEach(c => c.classList.remove('active'));
+                chip.classList.add('active');
+                if (chip.dataset.type === 'custom') {
+                    customInput.classList.add('show');
+                    customInput.focus();
+                } else {
+                    customInput.classList.remove('show');
+                }
+            });
+        });
+
         reviewsSec.appendChild(form);
     } else {
         const loginMsg = document.createElement('div');
@@ -602,16 +637,48 @@ function focusOn(item, cardElement) {
     }
 }
 
+// 모바일 하단 네비게이션 바텀시트 확장 제어 함수
+function expandBottomSheet(targetPercent = 70) {
+    if (window.innerWidth > 768) return;
+    const sheet = document.getElementById('bottom-sheet');
+    if (!sheet) return;
+
+    sheet.style.transition = 'height 0.3s cubic-bezier(0.2, 0.9, 0.3, 1)';
+    sheet.style.height = `${targetPercent}%`;
+}
+
 function applyFilter(category, btn) {
     document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+
+    // 모바일에서 바텀시트가 너무 작거나 접혀있으면 목록을 볼 수 있도록 55%로 확장
+    if (window.innerWidth <= 768) {
+        const sheet = document.getElementById('bottom-sheet');
+        const mainContent = document.querySelector('.main-content');
+        if (sheet && mainContent) {
+            const currentHeight = sheet.getBoundingClientRect().height;
+            const mainHeight = mainContent.getBoundingClientRect().height;
+            if (currentHeight < mainHeight * 0.4) {
+                expandBottomSheet(55);
+            }
+        }
+    }
+
     fetchData(category, document.getElementById('search-input').value);
 }
 
 function applySearch() {
+    const input = document.getElementById('search-input');
     const activeBtn = document.querySelector('.cat-btn.active');
     const category = activeBtn ? activeBtn.dataset.category : 'all';
-    fetchData(category === 'all' ? 'all' : category, document.getElementById('search-input').value);
+
+    // 모바일 가상 키보드가 검색 목록을 가리지 않도록 포커스 해제
+    if (input) input.blur();
+
+    // 💡 모바일에서 검색 시 자동으로 하단 네비게이션 바텀시트를 올려 바로 목록 확인 가능하게 처리
+    expandBottomSheet(70);
+
+    fetchData(category === 'all' ? 'all' : category, input ? input.value : '');
 }
 
 // 🎲 룰렛 제어 및 초기 설정
@@ -808,10 +875,16 @@ document.addEventListener('DOMContentLoaded', () => {
     initRoulette();   // 🎲 룰렛 모달 활성화
     initSettings();   // ⚙️ 서비스 설정 모달 활성화
 
-    // 검색어 입력
+    // 검색어 입력 (Enter)
     document.getElementById('search-input').addEventListener('keyup', (e) => {
         if (e.key === 'Enter') applySearch();
     });
+
+    // 🔍 검색 버튼 클릭 바인딩
+    const searchBtn = document.getElementById('btn-search');
+    if (searchBtn) {
+        searchBtn.addEventListener('click', applySearch);
+    }
 
     // GPS 위치 검색 버튼 바인딩
     const gpsBtn = document.getElementById('btn-gps');

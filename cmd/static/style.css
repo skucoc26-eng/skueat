@@ -192,7 +192,7 @@ body.dark-mode .logo {
     box-shadow: 0 0 0 3px var(--primary-light);
 }
 
-.btn-gps, .btn-random {
+.btn-search, .btn-gps, .btn-random {
     width: 42px;
     height: 42px;
     border: 1px solid var(--border);
@@ -204,6 +204,18 @@ body.dark-mode .logo {
     font-size: 17px;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     flex-shrink: 0;
+}
+
+.btn-search {
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    box-shadow: 0 2px 8px rgba(0, 86, 168, 0.25);
+}
+
+.btn-search:hover {
+    background: #004587;
+    transform: translateY(-1px);
 }
 
 .btn-gps {
@@ -522,6 +534,78 @@ body.dark-mode .logo {
     justify-content: space-between;
     font-size: 12px;
     font-weight: 700;
+}
+
+.author-selector-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 6px 0;
+    border-top: 1px dashed var(--border);
+    border-bottom: 1px dashed var(--border);
+}
+
+.author-selector-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-sub);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.author-type-chips {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.author-chip {
+    padding: 3px 8px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--text-sub);
+    user-select: none;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.author-chip:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.author-chip.active {
+    background: var(--primary-light);
+    border-color: var(--primary);
+    color: var(--primary);
+    font-weight: 700;
+}
+
+.custom-nickname-input {
+    display: none;
+    width: 100%;
+    padding: 6px 10px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 11px;
+    color: var(--text-main);
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.custom-nickname-input.show {
+    display: block;
+}
+
+.custom-nickname-input:focus {
+    border-color: var(--primary);
 }
 
 .star-picker {

@@ -9,12 +9,17 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 )
+
+// SessionDuration: 세션 쿠키 유효 기간 (7일, 초 단위)
+const SessionDuration = 7 * 24 * 3600
 
 // KakaoTokenResponse: 카카오 토큰 발급 응답 구조체
 type KakaoTokenResponse struct {
@@ -92,6 +97,15 @@ func main() {
 		sessionSecret = "secret"
 	}
 	store := cookie.NewStore([]byte(sessionSecret))
+
+	isHttps := strings.HasPrefix(os.Getenv("APP_DOMAIN"), "https://")
+	store.Options(sessions.Options{
+		Path:     "/",
+		MaxAge:   SessionDuration,
+		HttpOnly: true,
+		Secure:   isHttps,
+		SameSite: http.SameSiteLaxMode,
+	})
 	r.Use(sessions.Sessions("mysession", store))
 
 	// 💡 여기서 정적 파일(CSS, JS) 경로를 설정해 줍니다.
@@ -105,10 +119,10 @@ func main() {
 	// 메인 페이지
 	r.GET("/", func(c *gin.Context) {
 		session := sessions.Default(c)
-		userName := session.Get("userName")
+		userName, isLoggedIn := getValidUserName(session)
 		c.HTML(http.StatusOK, "index.html", gin.H{
 			"ApiKey":     os.Getenv("KAKAO_API_KEY"),
-			"IsLoggedIn": userName != nil,
+			"IsLoggedIn": isLoggedIn,
 			"UserName":   userName,
 			"AppDomain":  os.Getenv("APP_DOMAIN"),
 		})
@@ -175,6 +189,7 @@ func main() {
 
 		session := sessions.Default(c)
 		session.Set("userName", userInfo.Properties.Nickname)
+		session.Set("loginTime", time.Now().Unix())
 		session.Save()
 
 		c.Redirect(http.StatusFound, "/")
@@ -183,14 +198,38 @@ func main() {
 	// 별점 평가 API
 	r.POST("/api/rate", func(c *gin.Context) {
 		session := sessions.Default(c)
-		userName := session.Get("userName")
-		if userName == nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "로그인이 필요합니다."})
+		userName, ok := getValidUserName(session)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "로그인이 필요하거나 세션이 만료되었습니다."})
 			return
 		}
 		resID, _ := strconv.Atoi(c.PostForm("restaurant_id"))
 		score, _ := strconv.Atoi(c.PostForm("score"))
 		comment := c.PostForm("comment")
+		authorType := c.PostForm("author_type")
+		customName := strings.TrimSpace(c.PostForm("custom_name"))
+
+		var authorName string
+		switch authorType {
+		case "anon":
+			authorName = "익명"
+		case "custom":
+			if customName != "" {
+				runes := []rune(customName)
+				if len(runes) > 10 {
+					customName = string(runes[:10])
+				}
+				authorName = customName
+			} else {
+				authorName = maskName(userName)
+			}
+		case "real":
+			authorName = userName
+		case "masked":
+			fallthrough
+		default:
+			authorName = maskName(userName)
+		}
 
 		var res Restaurant
 		if err := DB.First(&res, resID).Error; err != nil {
@@ -200,7 +239,8 @@ func main() {
 
 		rating := Rating{
 			RestaurantID: uint(resID),
-			UserID:       userName.(string),
+			UserID:       userName,
+			AuthorName:   authorName,
 			Score:        score,
 			Comment:      comment,
 		}
@@ -233,6 +273,13 @@ func main() {
 		if err := DB.Where("restaurant_id = ?", resID).Order("id desc").Find(&reviews).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "리뷰를 불러올 수 없습니다."})
 			return
+		}
+
+		// 기존 데이터에 AuthorName이 비어있는 경우 마스킹 적용
+		for i := range reviews {
+			if reviews[i].AuthorName == "" {
+				reviews[i].AuthorName = maskName(reviews[i].UserID)
+			}
 		}
 
 		c.JSON(http.StatusOK, reviews)
@@ -296,3 +343,50 @@ func getKakaoUserInfo(token string) (*KakaoUserResponse, error) {
 	json.NewDecoder(resp.Body).Decode(&userRes)
 	return &userRes, nil
 }
+
+// getValidUserName: 세션에서 사용자명을 조회하며, 만료 기간(SessionDuration)을 검증
+func getValidUserName(session sessions.Session) (string, bool) {
+	userNameVal := session.Get("userName")
+	if userNameVal == nil {
+		return "", false
+	}
+	userName, ok := userNameVal.(string)
+	if !ok || userName == "" {
+		return "", false
+	}
+
+	loginTimeVal := session.Get("loginTime")
+	if loginTimeVal != nil {
+		if loginTime, ok := loginTimeVal.(int64); ok {
+			if time.Now().Unix()-loginTime > SessionDuration {
+				session.Clear()
+				session.Save()
+				return "", false
+			}
+		}
+	}
+	return userName, true
+}
+
+// maskName: 사용자 이름을 마스킹 (예: 김철수 -> 김*수, 홍길 -> 홍*, 남궁민수 -> 남**수)
+func maskName(name string) string {
+	runes := []rune(strings.TrimSpace(name))
+	n := len(runes)
+	if n <= 1 {
+		return string(runes)
+	}
+	if n == 2 {
+		return string(runes[0]) + "*"
+	}
+	if n == 3 {
+		return string(runes[0]) + "*" + string(runes[2])
+	}
+	var sb strings.Builder
+	sb.WriteRune(runes[0])
+	for i := 1; i < n-1; i++ {
+		sb.WriteRune('*')
+	}
+	sb.WriteRune(runes[n-1])
+	return sb.String()
+}
+

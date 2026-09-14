@@ -667,6 +667,9 @@ function applyFilter(category, btn) {
     document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
 
+    // 선택된 카테고리를 화면 안으로 부드럽게 스크롤
+    btn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+
     // 모바일에서 바텀시트가 너무 작거나 접혀있으면 목록을 볼 수 있도록 55%로 확장
     const sheet = document.getElementById('bottom-sheet');
     if (sheet) {
@@ -681,7 +684,8 @@ function applyFilter(category, btn) {
         }
     }
 
-    fetchData(category, document.getElementById('search-input').value);
+    const searchInput = document.getElementById('search-input');
+    fetchData(category, searchInput ? searchInput.value : '');
 }
 
 function applySearch() {
@@ -834,64 +838,221 @@ function runRouletteAnimation() {
     }, 3300);
 }
 
+// 🧭 상단 카테고리 바 수평 드래그 스크롤 및 탭 분리 제어
+function initCategoryScroll() {
+    const nav = document.getElementById('category-nav');
+    if (!nav) return;
+
+    let isPointerDown = false;
+    let startX = 0;
+    let initialScrollLeft = 0;
+    let isDragging = false;
+    let dragDistance = 0;
+
+    // 1. Pointer Events 지원 (모바일 터치 및 PC 마우스 드래그 공통 지원)
+    nav.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        isPointerDown = true;
+        isDragging = false;
+        dragDistance = 0;
+        startX = e.clientX;
+        initialScrollLeft = nav.scrollLeft;
+    });
+
+    window.addEventListener('pointermove', (e) => {
+        if (!isPointerDown) return;
+        const deltaX = e.clientX - startX;
+        dragDistance = Math.abs(deltaX);
+        if (dragDistance > 6) {
+            isDragging = true;
+            nav.scrollLeft = initialScrollLeft - deltaX;
+        }
+    });
+
+    const endDrag = () => {
+        if (!isPointerDown) return;
+        isPointerDown = false;
+        setTimeout(() => {
+            isDragging = false;
+        }, 100);
+    };
+
+    window.addEventListener('pointerup', endDrag);
+    window.addEventListener('pointercancel', endDrag);
+
+    // 2. 카테고리 버튼 클릭 이벤트 위임
+    nav.addEventListener('click', (e) => {
+        // 드래그 중이었다면 클릭 무시 (스와이프 스크롤 후 원치 않는 버튼 눌림 방지)
+        if (isDragging || dragDistance > 6) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+        const btn = e.target.closest('.cat-btn');
+        if (btn && btn.dataset.category) {
+            applyFilter(btn.dataset.category, btn);
+        }
+    });
+}
+
+// 📱 모바일 하단 네비게이션 바텀시트 터치 & 드래그 & 탭 제어
 function initBottomSheet() {
     const sheet = document.getElementById('bottom-sheet');
     const handle = document.getElementById('sheet-handle');
+    const listInfo = document.getElementById('list-count');
     const mainContent = document.querySelector('.main-content');
     
     if (!sheet || !handle || !mainContent) return;
 
     let isDragging = false;
-    let startY, startHeight;
+    let startY = 0;
+    let startHeight = 0;
+    let totalDeltaY = 0;
+    let capturedElement = null;
+    let activePointerId = null;
 
-    handle.addEventListener('touchstart', (e) => {
+    function isMobileSheet() {
+        return window.innerWidth <= 768 || window.matchMedia('(max-width: 768px)').matches || window.getComputedStyle(sheet).position === 'absolute';
+    }
+
+    function startDrag(clientY, target = null, pointerId = null) {
+        if (!isMobileSheet()) return;
         isDragging = true;
-        startY = e.touches[0].clientY;
+        startY = clientY;
+        totalDeltaY = 0;
         startHeight = sheet.getBoundingClientRect().height;
-        sheet.style.transition = 'none'; 
-    }, { passive: true });
+        sheet.style.transition = 'none';
 
-    document.addEventListener('touchmove', (e) => {
+        if (pointerId !== null && target && target.setPointerCapture) {
+            try {
+                target.setPointerCapture(pointerId);
+                capturedElement = target;
+                activePointerId = pointerId;
+            } catch (err) {}
+        }
+    }
+
+    function moveDrag(clientY, e = null) {
         if (!isDragging) return;
-        const deltaY = startY - e.touches[0].clientY;
+        if (e && e.cancelable) {
+            e.preventDefault();
+        }
+
+        const deltaY = startY - clientY;
+        totalDeltaY = deltaY;
         let newHeight = startHeight + deltaY;
 
         const mainHeight = mainContent.getBoundingClientRect().height;
-        const minHeight = mainHeight * 0.15;
+        const minHeight = Math.max(65, mainHeight * 0.12);
         const maxHeight = mainHeight * 0.95;
         
         if (newHeight < minHeight) newHeight = minHeight;
         if (newHeight > maxHeight) newHeight = maxHeight;
         
         sheet.style.height = `${newHeight}px`;
-    }, { passive: true });
+    }
 
-    document.addEventListener('touchend', () => {
+    function endDrag(clientY) {
         if (!isDragging) return;
         isDragging = false;
-        sheet.style.transition = 'height 0.3s ease-out'; 
+
+        if (capturedElement && activePointerId !== null && capturedElement.releasePointerCapture) {
+            try {
+                capturedElement.releasePointerCapture(activePointerId);
+            } catch (err) {}
+        }
+        capturedElement = null;
+        activePointerId = null;
+
+        sheet.style.transition = 'height 0.3s cubic-bezier(0.2, 0.9, 0.3, 1)'; 
 
         const currentHeight = sheet.getBoundingClientRect().height;
         const mainHeight = mainContent.getBoundingClientRect().height;
+        const ratio = currentHeight / mainHeight;
 
-        if (currentHeight > mainHeight * 0.6) {
+        // 이동 거리가 8px 미만이면 '탭/클릭'으로 인식하여 높이 자동 토글
+        if (Math.abs(totalDeltaY) < 8) {
+            if (ratio < 0.28) {
+                sheet.style.height = '45%';
+            } else if (ratio < 0.70) {
+                sheet.style.height = '95%';
+            } else {
+                sheet.style.height = '45%';
+            }
+            return;
+        }
+
+        // 드래그 종료 시 비율에 맞춰 부드럽게 스냅
+        if (ratio > 0.65) {
             sheet.style.height = '95%';
-        } else if (currentHeight < mainHeight * 0.3) {
+        } else if (ratio < 0.28) {
             sheet.style.height = '15%';
         } else {
             sheet.style.height = '45%';
         }
+    }
+
+    // 드래그 트리거 영역 (핸들 바 + 주변 맛집 카운트 헤더)
+    const dragTargets = [handle];
+    if (listInfo) dragTargets.push(listInfo);
+
+    // 1. 모던 포인터 이벤트 (Android Chrome, Samsung Internet, iOS Safari 등 완벽 대응)
+    dragTargets.forEach(target => {
+        target.addEventListener('pointerdown', (e) => {
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
+            startDrag(e.clientY, target, e.pointerId);
+        });
+
+        target.addEventListener('pointermove', (e) => {
+            moveDrag(e.clientY, e);
+        });
+
+        target.addEventListener('pointerup', (e) => {
+            endDrag(e.clientY);
+        });
+
+        target.addEventListener('pointercancel', (e) => {
+            endDrag(e.clientY);
+        });
+    });
+
+    // 2. 터치 이벤트 fallback (특수 브라우저 및 하위 호환)
+    dragTargets.forEach(target => {
+        target.addEventListener('touchstart', (e) => {
+            if (e.touches && e.touches.length > 0) {
+                startDrag(e.touches[0].clientY);
+            }
+        }, { passive: true });
+    });
+
+    document.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+        if (e.touches && e.touches.length > 0) {
+            moveDrag(e.touches[0].clientY, e);
+        }
+    }, { passive: false });
+
+    document.addEventListener('touchend', (e) => {
+        if (!isDragging) return;
+        const clientY = e.changedTouches && e.changedTouches.length > 0 ? e.changedTouches[0].clientY : startY;
+        endDrag(clientY);
+    });
+
+    document.addEventListener('touchcancel', () => {
+        if (!isDragging) return;
+        endDrag(startY);
     });
 }
 
 // 초기화 및 이벤트 리스너 등록
 document.addEventListener('DOMContentLoaded', () => {
-    initTheme();      // 🌓 다크 모드 활성화
+    initTheme();          // 🌓 다크 모드 활성화
     initMap();
     fetchData();
-    initBottomSheet();
-    initRoulette();   // 🎲 룰렛 모달 활성화
-    initSettings();   // ⚙️ 서비스 설정 모달 활성화
+    initBottomSheet();    // 📱 모바일 바텀시트 제어
+    initCategoryScroll(); // 🧭 상단 카테고리 바 드래그 및 터치 스크롤 제어
+    initRoulette();       // 🎲 룰렛 모달 활성화
+    initSettings();       // ⚙️ 서비스 설정 모달 활성화
 
     // 검색 폼 제출 (Enter키 및 모바일 키보드 검색 버튼 완벽 지원)
     const searchForm = document.getElementById('search-form');
@@ -943,11 +1104,4 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-
-    // 카테고리 필터
-    document.getElementById('category-nav').addEventListener('click', (e) => {
-        if (e.target.classList.contains('cat-btn')) {
-            applyFilter(e.target.dataset.category, e.target);
-        }
-    });
 });

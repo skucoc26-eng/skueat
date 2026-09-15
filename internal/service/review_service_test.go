@@ -150,4 +150,16 @@ func TestAddReview_Transactional(t *testing.T) {
 	if math.Abs(updatedRes.AvgRating-3.0) > 0.0001 {
 		t.Errorf("expected AvgRating 3.0, got %v", updatedRes.AvgRating)
 	}
+
+	// 3. GetReviews 호출 시 ReviewResponse DTO에 개인정보가 차단되고 AuthorName이 익명인지 검증
+	reviews, err := svc.GetReviews(testRes.ID)
+	if err != nil {
+		t.Fatalf("GetReviews failed: %v", err)
+	}
+	if len(reviews) != 1 {
+		t.Fatalf("expected 1 review, got %d", len(reviews))
+	}
+	if reviews[0].AuthorName != "익명" {
+		t.Errorf("expected AuthorName '익명', got %q", reviews[0].AuthorName)
+	}
 }

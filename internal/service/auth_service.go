@@ -13,7 +13,7 @@ import (
 
 // AuthService 카카오 소셜 인증 비즈니스 로직 인터페이스
 type AuthService interface {
-	GetAuthURL() string
+	GetAuthURL(state string) string
 	GetToken(code string) (*model.KakaoTokenResponse, error)
 	GetUserInfo(token string) (*model.KakaoUserResponse, error)
 }
@@ -33,13 +33,17 @@ func NewAuthService(cfg *config.Config) AuthService {
 	}
 }
 
-func (s *authService) GetAuthURL() string {
+func (s *authService) GetAuthURL(state string) string {
 	redirectURI := s.cfg.AppDomain + "/auth/kakao/callback"
-	return fmt.Sprintf(
+	authURL := fmt.Sprintf(
 		"https://kauth.kakao.com/oauth/authorize?client_id=%s&redirect_uri=%s&response_type=code",
 		s.cfg.RestAPIKey,
 		url.QueryEscape(redirectURI),
 	)
+	if state != "" {
+		authURL += "&state=" + url.QueryEscape(state)
+	}
+	return authURL
 }
 
 func (s *authService) GetToken(code string) (*model.KakaoTokenResponse, error) {

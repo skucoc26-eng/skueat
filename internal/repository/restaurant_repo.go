@@ -32,7 +32,7 @@ func (r *restaurantRepository) FindAll(category, search string) ([]model.Restaur
 		query = query.Where("food LIKE ?", "%"+category+"%")
 	}
 	if search != "" {
-		query = query.Where("title LIKE ? OR addr LIKE ?", "%"+search+"%", "%"+search+"%")
+		query = query.Where("title LIKE ? OR addr LIKE ? OR food LIKE ?", "%"+search+"%", "%"+search+"%", "%"+search+"%")
 	}
 
 	if err := query.Find(&list).Error; err != nil {

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"log"
 	"os"
 	"strings"
 
@@ -42,6 +43,7 @@ func LoadConfig() *Config {
 
 	sessionSecret := os.Getenv("SESSION_SECRET")
 	if sessionSecret == "" {
+		log.Println("WARN  SESSION_SECRET 환경변수가 비어있어 기본값('secret')을 사용합니다. 실무 운영 환경에서는 반드시 유니크한 비밀키를 설정하십시오.")
 		sessionSecret = "secret"
 	}
 

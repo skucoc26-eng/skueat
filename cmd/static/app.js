@@ -9,12 +9,30 @@ let isRouletteRunning = false;
 let activeTooltipOverlay = null; // 현재 지도 위에 표시 중인 식당 이름 말풍선 오버레이
 let showMarkers = true; // 지도 위의 음식점 마커들의 전체 표시 여부
 
-const SUNGKYUL_CENTER = new kakao.maps.LatLng(37.382, 126.931);
+const SUNGKYUL_LAT = 37.382;
+const SUNGKYUL_LNG = 126.931;
 const MAX_BOUNDS_DISTANCE = 1800; // 성결대 중심 기준 반경 1.8km 이내로 이동 제한
+
+// XSS 방어를 위한 HTML 특수문자 이스케이프 함수
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
 
 function initMap() {
     const container = document.getElementById('map');
-    const options = { center: SUNGKYUL_CENTER, level: 3 };
+    if (!container || !window.kakao || !window.kakao.maps) {
+        console.warn("카카오 지도 SDK가 로드되지 않아 지도 초기화를 건너뜁니다.");
+        return;
+    }
+
+    const sungkyulCenter = new kakao.maps.LatLng(SUNGKYUL_LAT, SUNGKYUL_LNG);
+    const options = { center: sungkyulCenter, level: 3 };
     map = new kakao.maps.Map(container, options);
 
     // 💡 지도 축소/확대 레벨 제한 (캠퍼스 생활권 내로 고정)
@@ -24,9 +42,9 @@ function initMap() {
     // 💡 지도 이동 범위 제한 (캠퍼스 반경을 지나치게 벗어나면 중심으로 자동 복귀)
     kakao.maps.event.addListener(map, 'dragend', function() {
         const center = map.getCenter();
-        const dist = getDistance(37.382, 126.931, center.getLat(), center.getLng());
+        const dist = getDistance(SUNGKYUL_LAT, SUNGKYUL_LNG, center.getLat(), center.getLng());
         if (dist > MAX_BOUNDS_DISTANCE) {
-            map.panTo(SUNGKYUL_CENTER);
+            map.panTo(sungkyulCenter);
         }
     });
 }
@@ -411,14 +429,16 @@ async function loadReviews(resId, listContainer) {
             const item = document.createElement('div');
             item.className = 'review-item';
             
-            const stars = '★'.repeat(rev.score) + '☆'.repeat(5 - rev.score);
-            const displayName = rev.author_name || rev.user_id || '익명';
+            const scoreVal = Math.max(1, Math.min(5, Number(rev.score) || 5));
+            const stars = '★'.repeat(scoreVal) + '☆'.repeat(5 - scoreVal);
+            const displayName = escapeHtml(rev.author_name || '익명');
+            const commentText = escapeHtml(rev.comment || '별점만 남겼습니다.');
             item.innerHTML = `
                 <div class="review-item-header">
                     <span class="review-user">${displayName}</span>
                     <span class="review-stars">${stars}</span>
                 </div>
-                <div class="review-text">${rev.comment || '별점만 남겼습니다.'}</div>
+                <div class="review-text">${commentText}</div>
             `;
             listContainer.appendChild(item);
         });
@@ -427,8 +447,13 @@ async function loadReviews(resId, listContainer) {
     }
 }
 
+// 한 줄 평 제출 중복 방지 플래그
+let isSubmittingReview = false;
+
 // 한 줄 평 제출 함수
 async function submitComment(resId, form, reviewsList, item) {
+    if (isSubmittingReview) return;
+
     const picker = form.querySelector('.star-picker');
     const score = picker.dataset.score || 5;
     const commentInput = form.querySelector('.review-comment-input');
@@ -445,6 +470,10 @@ async function submitComment(resId, form, reviewsList, item) {
     formData.append('comment', comment);
     formData.append('author_type', authorType);
     formData.append('custom_name', customName);
+
+    isSubmittingReview = true;
+    const submitBtn = form.querySelector('button[type="submit"]') || form.querySelector('.submit-btn');
+    if (submitBtn) submitBtn.disabled = true;
 
     try {
         const response = await fetch('/api/rate', {
@@ -478,6 +507,9 @@ async function submitComment(resId, form, reviewsList, item) {
         }
     } catch (e) {
         alert("네트워크 오류가 발생했습니다.");
+    } finally {
+        isSubmittingReview = false;
+        if (submitBtn) submitBtn.disabled = false;
     }
 }
 

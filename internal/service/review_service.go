@@ -19,7 +19,7 @@ var (
 // ReviewService 리뷰 및 평점 비즈니스 로직 인터페이스
 type ReviewService interface {
 	AddReview(req model.RateRequest, userName string) (*model.Rating, float64, error)
-	GetReviews(restaurantID uint) ([]model.Rating, error)
+	GetReviews(restaurantID uint) ([]model.ReviewResponse, error)
 }
 
 type reviewService struct {
@@ -90,20 +90,30 @@ func (s *reviewService) AddReview(req model.RateRequest, userName string) (*mode
 	return &rating, newAvg, nil
 }
 
-// GetReviews 식당의 리뷰 목록 조회 (작성자명이 비어있을 경우 마스킹 보정)
-func (s *reviewService) GetReviews(restaurantID uint) ([]model.Rating, error) {
+// GetReviews 식당의 리뷰 목록 조회 (개인정보를 완전히 차단한 ReviewResponse DTO 반환)
+func (s *reviewService) GetReviews(restaurantID uint) ([]model.ReviewResponse, error) {
 	reviews, err := s.reviewRepo.FindByRestaurantID(restaurantID)
 	if err != nil {
 		return nil, err
 	}
 
-	for i := range reviews {
-		if reviews[i].AuthorName == "" {
-			reviews[i].AuthorName = utils.MaskName(reviews[i].UserID)
+	resList := make([]model.ReviewResponse, len(reviews))
+	for i, r := range reviews {
+		author := r.AuthorName
+		if author == "" {
+			author = utils.MaskName(r.UserID)
+		}
+		resList[i] = model.ReviewResponse{
+			ID:           r.ID,
+			RestaurantID: r.RestaurantID,
+			AuthorName:   author,
+			Score:        r.Score,
+			Comment:      r.Comment,
+			CreatedAt:    r.CreatedAt,
 		}
 	}
 
-	return reviews, nil
+	return resList, nil
 }
 
 // DetermineAuthorName 옵션에 따른 표시 닉네임 결정

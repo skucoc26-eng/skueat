@@ -1,6 +1,8 @@
 package model
 
 import (
+	"time"
+
 	"gorm.io/gorm"
 )
 
@@ -21,10 +23,20 @@ type Restaurant struct {
 type Rating struct {
 	gorm.Model
 	RestaurantID uint   `json:"restaurant_id"`
-	UserID       string `json:"user_id"`     // 카카오 고유 ID 또는 사용자 식별자
+	UserID       string `json:"-"`           // 내부 식별용 (API 응답에서 절대 노출되지 않음)
 	AuthorName   string `json:"author_name"` // 화면에 표시될 닉네임 (마스킹, 익명, 실명 등)
 	Score        int    `json:"score"`
 	Comment      string `json:"comment" gorm:"type:text"` // 한 줄 평
+}
+
+// ReviewResponse 클라이언트 공개용 리뷰 응답 DTO (사용자 실제 식별자 제외)
+type ReviewResponse struct {
+	ID           uint      `json:"id"`
+	RestaurantID uint      `json:"restaurant_id"`
+	AuthorName   string    `json:"author_name"`
+	Score        int       `json:"score"`
+	Comment      string    `json:"comment"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // RateRequest 리뷰/별점 등록 요청 폼 바인딩 구조체

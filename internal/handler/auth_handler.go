@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"log"
 	"net/http"
 	"time"
@@ -23,7 +25,16 @@ func NewAuthHandler(svc service.AuthService) *AuthHandler {
 
 // LoginKakao 카카오 간편 로그인 시작 엔드포인트 (GET /login/kakao)
 func (h *AuthHandler) LoginKakao(c *gin.Context) {
-	authURL := h.svc.GetAuthURL()
+	// CSRF 방지를 위한 암호학적 32바이트 state 난수 생성
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	state := hex.EncodeToString(b)
+
+	session := sessions.Default(c)
+	session.Set("oauth_state", state)
+	_ = session.Save()
+
+	authURL := h.svc.GetAuthURL(state)
 	c.Redirect(http.StatusFound, authURL)
 }
 
@@ -34,6 +45,17 @@ func (h *AuthHandler) AuthKakaoCallback(c *gin.Context) {
 		c.String(http.StatusBadRequest, "인가 코드가 없습니다.")
 		return
 	}
+
+	state := c.Query("state")
+	session := sessions.Default(c)
+	savedState := session.Get("oauth_state")
+
+	// CSRF 방어를 위한 state 일치 검증
+	if savedState == nil || savedState.(string) != state || state == "" {
+		c.String(http.StatusBadRequest, "유효하지 않거나 만료된 요청입니다 (CSRF 검증 실패).")
+		return
+	}
+	session.Delete("oauth_state")
 
 	tokenRes, err := h.svc.GetToken(code)
 	if err != nil {
@@ -49,7 +71,6 @@ func (h *AuthHandler) AuthKakaoCallback(c *gin.Context) {
 		return
 	}
 
-	session := sessions.Default(c)
 	session.Set("userName", userInfo.Properties.Nickname)
 	session.Set("loginTime", time.Now().Unix())
 	if err := session.Save(); err != nil {

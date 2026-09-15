@@ -1,4 +1,4 @@
-package main
+package repository
 
 import (
 	"encoding/json"
@@ -8,84 +8,69 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
+
+	"restaurant-api/internal/model"
 )
 
-var DB *gorm.DB
-
-type Restaurant struct {
-	gorm.Model
-	Title       string  `json:"title"`
-	Addr        string  `json:"addr"`
-	Food        string  `json:"food"`
-	X           float64 `json:"x"`
-	Y           float64 `json:"y"`
-	URL         string  `json:"url"`
-	AvgRating   float64 `json:"avg_rating" gorm:"default:0"`   // 평균 별점
-	RatingCount int     `json:"rating_count" gorm:"default:0"` // 참여 인원
-}
-
-// 별점 및 리뷰 기록 테이블
-type Rating struct {
-	gorm.Model
-	RestaurantID uint   `json:"restaurant_id"`
-	UserID       string `json:"user_id"` // 카카오 고유 ID
-	AuthorName   string `json:"author_name"` // 화면에 표시될 닉네임(마스킹, 익명 등)
-	Score        int    `json:"score"`
-	Comment      string `json:"comment" gorm:"type:text"` // 한 줄 평
-}
-
-func InitDB() {
-	var err error
-	dbPath := os.Getenv("DATABASE_PATH")
-	if dbPath == "" {
-		dbPath = "restaurants.db"
-	}
-	DB, err = gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+// InitDB SQLite DB 연결 및 테이블 마이그레이션, 초기 시드 데이터를 적재합니다.
+func InitDB(dbPath string) (*gorm.DB, error) {
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
 	if err != nil {
-		log.Fatal("DB 연결 실패:", err)
+		return nil, err
 	}
-	// 두 테이블 모두 마이그레이션
-	DB.AutoMigrate(&Restaurant{}, &Rating{})
 
-	var count int64
-	DB.Model(&Restaurant{}).Count(&count)
-	if count == 0 {
-		loadInitialData()
+	// 테이블 자동 마이그레이션
+	if err := db.AutoMigrate(&model.Restaurant{}, &model.Rating{}); err != nil {
+		return nil, err
 	}
+
+	// 데이터가 비어있는 경우 초기 데이터 적재
+	var count int64
+	db.Model(&model.Restaurant{}).Count(&count)
+	if count == 0 {
+		loadInitialData(db)
+	}
+
+	return db, nil
 }
 
-func loadInitialData() {
+func loadInitialData(db *gorm.DB) {
 	jsonFile, err := os.Open("restaurants.json")
 	if err != nil {
-		log.Println("restaurants.json 파일이 없거나 열 수 없습니다. 샘플 데이터를 로드합니다.")
-		seedData()
+		log.Println("restaurants.json 파일이 없거나 열 수 없습니다. 내장 샘플 데이터를 로드합니다.")
+		seedData(db)
 		return
 	}
 	defer jsonFile.Close()
 
 	byteValue, err := io.ReadAll(jsonFile)
 	if err != nil {
-		log.Println("restaurants.json 파일을 읽는 도중 오류가 발생했습니다. 샘플 데이터를 로드합니다.")
-		seedData()
+		log.Println("restaurants.json 파일을 읽는 도중 오류가 발생했습니다. 내장 샘플 데이터를 로드합니다.")
+		seedData(db)
 		return
 	}
 
-	var samples []Restaurant
+	var samples []model.Restaurant
 	if err := json.Unmarshal(byteValue, &samples); err != nil {
-		log.Printf("restaurants.json 파싱 실패: %v. 샘플 데이터를 로드합니다.", err)
-		seedData()
+		log.Printf("restaurants.json 파싱 실패: %v. 내장 샘플 데이터를 로드합니다.", err)
+		seedData(db)
 		return
 	}
 
 	if len(samples) > 0 {
-		DB.Create(&samples)
-		log.Printf("restaurants.json 으로부터 %d개의 맛집 데이터를 성공적으로 로드했습니다!", len(samples))
+		if err := db.Create(&samples).Error; err != nil {
+			log.Printf("restaurants.json 데이터 적재 실패: %v. 샘플 데이터를 로드합니다.", err)
+			seedData(db)
+		} else {
+			log.Printf("restaurants.json 으로부터 %d개의 맛집 데이터를 성공적으로 로드했습니다!", len(samples))
+		}
 	} else {
-		seedData()
+		seedData(db)
 	}
 }
-func seedData() {
-	samples := []Restaurant{
+
+func seedData(db *gorm.DB) {
+	samples := []model.Restaurant{
 		{Title: "부산가야밀면 안양본점", Addr: "경기도 안양시 만안구 문예로36번길 15", Food: "국수", X: 126.932263875909, Y: 37.3848854642594, URL: "https://place.map.kakao.com/13092162"},
 		{Title: "지호한방삼계탕 만안구청점", Addr: "경기 안양시 만안구 안양로 115", Food: "닭요리, 고기", X: 126.932522205927, Y: 37.3849110208067, URL: "https://place.map.kakao.com/17978026"},
 		{Title: "미소푸드", Addr: "경기 안양시 만안구 안양로 119", Food: "한식뷔페", X: 126.932155188339, Y: 37.385330147164, URL: "https://place.map.kakao.com/888574466"},
@@ -154,5 +139,5 @@ func seedData() {
 		{Title: "힐링돈가스", Addr: "경기 안양시 만안구 성결대학로 47 1층", Food: "고기", X: 126.929342303114, Y: 37.3816061005363, URL: "https://place.map.kakao.com/279095344"},
 		{Title: "가마치통닭", Addr: "경기 안양시 만안구 성결대학로 30 1층 101호", Food: "치킨", X: 126.930879977321, Y: 37.3826648113753, URL: "https://place.map.kakao.com/1051546409"},
 	}
-	DB.Create(&samples)
+	db.Create(&samples)
 }

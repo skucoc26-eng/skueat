@@ -80,12 +80,33 @@ skueat/
 │   │   ├── style.css         # 반응형 레이아웃, 바텀시트, 다크모드 스타일시트
 │   │   └── logo.svg          # skueat 서비스 로고
 │   ├── .env                  # 로컬 환경 변수 설정 파일 (API 키 등)
-│   ├── db.go                 # SQLite DB 연결, AutoMigrate, 초기 데이터 로더 (JSON)
 │   ├── index.html            # 메인 SPA 템플릿 및 모달 (룰렛, 설정) 구조
-│   ├── main.go               # Gin 서버 초기화, 라우터, 카카오 OAuth, API 엔드포인트
-│   ├── mask_test.go          # 닉네임 마스킹 로직 단위 테스트
+│   ├── main.go               # 서버 진입점 (설정 로드, DI 및 라우터 마운트)
 │   ├── restaurants.db        # SQLite 데이터베이스 파일 (로컬 실행 시 생성)
 │   └── restaurants.json      # 성결대 주변 초기 맛집 데이터셋
+├── internal/
+│   ├── config/
+│   │   └── config.go         # 환경 변수 구조체 및 로더
+│   ├── handler/              # HTTP 요청/응답 처리 계층
+│   │   ├── auth_handler.go   # 카카오 로그인/로그아웃 핸들러
+│   │   ├── handler.go        # 통합 라우터 및 세션 설정
+│   │   ├── page_handler.go   # 메인 페이지 서빙 핸들러
+│   │   ├── restaurant_handler.go # 맛집 목록/추천 핸들러
+│   │   └── review_handler.go # 리뷰/별점 핸들러 (유효성 검증 포함)
+│   ├── model/
+│   │   └── models.go         # 도메인 모델, GORM 테이블, DTO 및 폼 바인딩 구조체
+│   ├── repository/           # 데이터 영속성(DB 접근) 계층
+│   │   ├── db.go             # GORM SQLite 연결 및 초기 데이터 로드
+│   │   ├── restaurant_repo.go # 식당 CRUD 레포지토리
+│   │   └── review_repo.go    # 리뷰/별점 레포지토리
+│   ├── service/              # 비즈니스 로직 계층
+│   │   ├── auth_service.go   # 카카오 OAuth 토큰/프로필 연동 로직
+│   │   ├── restaurant_service.go # 맛집 큐레이션 비즈니스 로직
+│   │   ├── review_service.go # 리뷰 등록 및 평점 트랜잭션 갱신 로직
+│   │   └── review_service_test.go # 리뷰/평점 트랜잭션 단위 테스트
+│   └── utils/
+│       ├── mask.go           # 닉네임 마스킹 유틸리티
+│       └── mask_test.go      # 마스킹 단위 테스트
 ├── Dockerfile                # 멀티스테이지 경량 도커 이미지 빌드 정의
 ├── fly.toml                  # Fly.io 클라우드 배포 및 볼륨 마운트 설정
 ├── go.mod                    # Go 모듈 의존성 정의
@@ -146,10 +167,10 @@ go mod tidy
 
 # 2. cmd 디렉터리로 이동 후 서버 실행
 cd cmd
-go run main.go db.go
+go run .
 
-# 또는 프로젝트 루트에서 빌드 후 실행
-go run ./cmd
+# 또는 단위 테스트 전체 실행
+go test -v ./...
 ```
 
 서버가 구동되면 브라우저에서 `http://localhost:8080`으로 접속합니다.

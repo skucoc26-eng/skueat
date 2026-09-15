@@ -9,6 +9,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY cmd/ ./cmd/
+COPY internal/ ./internal/
 
 # Build the binary
 RUN go build -o server ./cmd

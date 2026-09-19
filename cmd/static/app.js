@@ -5,6 +5,12 @@ let userLocOverlay = null;
 let userCircle = null;
 let isGpsActive = false;
 let currentRestaurants = []; // 룰렛/랜덤 매칭에 사용될 현재 필터링된 맛집 목록 캐시
+const searchModule = import('/static/search.mjs');
+let restaurantsRequest;
+let searchRequestID = 0;
+let searchTimer;
+let isSearchComposing = false;
+let renderedSearchState;
 let isRouletteRunning = false;
 let activeTooltipOverlay = null; // 현재 지도 위에 표시 중인 식당 이름 말풍선 오버레이
 let showMarkers = true; // 지도 위의 음식점 마커들의 전체 표시 여부
@@ -22,6 +28,38 @@ function escapeHtml(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+}
+
+// 🍞 커스텀 모던 토스트 알림 띄우기 함수
+function showToast(message, type = 'info') {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `toast-message toast-${type}`;
+
+    let icon = 'ℹ️';
+    if (type === 'success') icon = '✅';
+    else if (type === 'error') icon = '⚠️';
+
+    toast.innerHTML = `<span>${icon}</span><span>${escapeHtml(message)}</span>`;
+    container.appendChild(toast);
+
+    requestAnimationFrame(() => {
+        toast.classList.add('show');
+    });
+
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => {
+            if (toast.parentElement) toast.remove();
+        }, 300);
+    }, 2800);
 }
 
 function initMap() {
@@ -120,7 +158,7 @@ function initSettings() {
         toggleMarkersVisibility();
 
         modal.classList.remove('open');
-        alert("설정이 성공적으로 저장되었습니다! ⚙️");
+        showToast("설정이 성공적으로 저장되었습니다! ⚙️", "success");
     });
 }
 
@@ -157,7 +195,7 @@ function getDistance(lat1, lon1, lat2, lon2) {
 // GPS 위치 요청 함수
 function requestUserLocation() {
     if (!navigator.geolocation) {
-        alert("이 브라우저에서는 위치 서비스를 지원하지 않습니다.");
+        showToast("이 브라우저에서는 위치 서비스를 지원하지 않습니다.", "error");
         return;
     }
 
@@ -215,7 +253,7 @@ function requestUserLocation() {
         },
         (error) => {
             console.error("위치 획득 실패", error);
-            alert("위치 정보를 가져올 수 없습니다. GPS 권한을 확인해 주세요.");
+            showToast("위치 정보를 가져올 수 없습니다. GPS 권한을 확인해 주세요.", "error");
             isGpsActive = false;
             if (gpsBtn) {
                 gpsBtn.classList.remove('active');
@@ -227,22 +265,35 @@ function requestUserLocation() {
 }
 
 async function fetchData(category = 'all', search = '') {
-    const url = `/api/restaurants?category=${category}&search=${search}`;
+    const requestID = ++searchRequestID;
     try {
-        const response = await fetch(url);
-        const data = await response.json();
+        if (!restaurantsRequest) {
+            restaurantsRequest = fetch('/api/restaurants').then(response => {
+                if (!response.ok) throw new Error('식당 목록 요청 실패');
+                return response.json();
+            }).catch(error => { restaurantsRequest = null; throw error; });
+        }
+        const [restaurants, { searchRestaurants }] = await Promise.all([restaurantsRequest, searchModule]);
+        if (requestID !== searchRequestID) return;
         
         // 내 위치 정보가 있으면 거리 계산 및 소팅 적용
         if (userCoords) {
-            data.forEach(item => {
+            restaurants.forEach(item => {
                 item.distance = getDistance(userCoords.lat, userCoords.lng, item.y, item.x);
             });
-            data.sort((a, b) => a.distance - b.distance);
         }
 
+        const data = searchRestaurants(restaurants, category, search);
         currentRestaurants = data; // 룰렛용 현재 맛집 목록 캐싱
-        renderList(data);
-    } catch (e) { console.error("로드 실패", e); }
+        const state = JSON.stringify(data.map(item => [item.ID, item.avg_rating, item.rating_count, item.distance]));
+        if (state !== renderedSearchState) {
+            renderList(data);
+            renderedSearchState = state;
+        }
+    } catch (e) {
+        console.error("로드 실패", e);
+        if (requestID === searchRequestID) showToast('식당 목록을 불러오지 못했습니다. 다시 검색해 주세요.', 'error');
+    }
 }
 
 function renderList(data) {
@@ -483,14 +534,17 @@ async function submitComment(resId, form, reviewsList, item) {
         });
         const result = await response.json();
         if (response.ok) {
-            alert("한 줄 평이 등록되었습니다! 🎉");
+            const successMsg = result.message || (result.is_updated ? "기존 평가가 수정되었습니다! 🎉" : "한 줄 평이 등록되었습니다! 🎉");
+            showToast(successMsg, "success");
             commentInput.value = '';
             
             // 리뷰 새로고침
             loadReviews(resId, reviewsList);
             
-            // 데이터 업데이트
-            item.rating_count += 1;
+            // 데이터 업데이트 (신규 등록 시에만 카운트 증가)
+            if (!result.is_updated) {
+                item.rating_count = (item.rating_count || 0) + 1;
+            }
             item.avg_rating = result.new_avg;
 
             // UI 갱신 (리스트의 평균 평점 및 개수 즉시 변경)
@@ -503,10 +557,10 @@ async function submitComment(resId, form, reviewsList, item) {
             const titleEl = form.closest('.reviews-section').querySelector('.reviews-title');
             if (titleEl) titleEl.innerHTML = `💬 한 줄 평 목록 (${result.new_avg.toFixed(1)} / 5.0)`;
         } else {
-            alert(result.error || "평가 등록 실패");
+            showToast(result.error || "평가 등록 실패", "error");
         }
     } catch (e) {
-        alert("네트워크 오류가 발생했습니다.");
+        showToast("네트워크 오류가 발생했습니다.", "error");
     } finally {
         isSubmittingReview = false;
         if (submitBtn) submitBtn.disabled = false;
@@ -720,16 +774,17 @@ function applyFilter(category, btn) {
     fetchData(category, searchInput ? searchInput.value : '');
 }
 
-function applySearch() {
+function applySearch(live = false) {
+    clearTimeout(searchTimer);
     const input = document.getElementById('search-input');
     const activeBtn = document.querySelector('.cat-btn.active');
     const category = activeBtn ? activeBtn.dataset.category : 'all';
 
     // 모바일 가상 키보드가 검색 목록을 가리지 않도록 포커스 해제
-    if (input) input.blur();
+    if (!live && input) input.blur();
 
     // 💡 모바일에서 검색 시 자동으로 하단 네비게이션 바텀시트를 올려 바로 목록 확인 가능하게 처리
-    expandBottomSheet(70);
+    if (!live) expandBottomSheet(70);
 
     const keyword = input ? input.value.trim() : '';
     fetchData(category === 'all' ? 'all' : category, keyword);
@@ -746,7 +801,7 @@ function initRoulette() {
 
     randomBtn.addEventListener('click', () => {
         if (currentRestaurants.length === 0) {
-            alert("추천할 음식점이 없습니다! 필터를 확인해 주세요.");
+            showToast("추천할 음식점이 없습니다! 필터를 확인해 주세요.", "info");
             return;
         }
         modal.classList.add('open');
@@ -800,7 +855,7 @@ function runRouletteAnimation() {
     }
 
     if (candidates.length === 0) {
-        alert("선택한 조건에 맞는 음식점이 없습니다! 제외 옵션을 해제해 주세요.");
+        showToast("선택한 조건에 맞는 음식점이 없습니다! 제외 옵션을 해제해 주세요.", "info");
         return;
     }
 
@@ -1091,13 +1146,31 @@ document.addEventListener('DOMContentLoaded', () => {
     if (searchForm) {
         searchForm.addEventListener('submit', (e) => {
             e.preventDefault();
+            if (isSearchComposing) return;
             applySearch();
         });
     }
 
     const searchInput = document.getElementById('search-input');
     if (searchInput) {
+        const scheduleSearch = () => {
+            clearTimeout(searchTimer);
+            // 이전 비동기 요청이 현재 입력보다 늦게 화면을 덮어쓰지 않게 합니다.
+            ++searchRequestID;
+            if (!isSearchComposing) searchTimer = setTimeout(() => applySearch(true), 180);
+        };
+        searchInput.addEventListener('compositionstart', () => {
+            isSearchComposing = true;
+            clearTimeout(searchTimer);
+            ++searchRequestID;
+        });
+        searchInput.addEventListener('compositionend', () => {
+            isSearchComposing = false;
+            scheduleSearch();
+        });
+        searchInput.addEventListener('input', scheduleSearch);
         searchInput.addEventListener('keydown', (e) => {
+            if (e.isComposing || isSearchComposing || e.keyCode === 229) return;
             if (e.key === 'Enter') {
                 e.preventDefault();
                 applySearch();

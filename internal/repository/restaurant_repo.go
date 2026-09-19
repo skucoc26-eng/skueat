@@ -13,6 +13,7 @@ type RestaurantRepository interface {
 	FindByIDWithTx(tx *gorm.DB, id uint) (*model.Restaurant, error)
 	FindRandom() (*model.Restaurant, error)
 	UpdateStatsWithTx(tx *gorm.DB, id uint, avgRating float64, count int) error
+	RecalculateStatsWithTx(tx *gorm.DB, id uint) (float64, int, error)
 }
 
 type restaurantRepository struct {
@@ -75,7 +76,37 @@ func (r *restaurantRepository) UpdateStatsWithTx(tx *gorm.DB, id uint, avgRating
 		db = tx
 	}
 	return db.Model(&model.Restaurant{}).Where("id = ?", id).Updates(map[string]interface{}{
-		"AvgRating":   avgRating,
-		"RatingCount": count,
+		"avg_rating":   avgRating,
+		"rating_count": count,
 	}).Error
+}
+
+func (r *restaurantRepository) RecalculateStatsWithTx(tx *gorm.DB, id uint) (float64, int, error) {
+	db := r.db
+	if tx != nil {
+		db = tx
+	}
+
+	var stats struct {
+		Avg   float64
+		Count int
+	}
+
+	if err := db.Model(&model.Rating{}).
+		Select("COALESCE(ROUND(AVG(score), 1), 0) as avg, COUNT(*) as count").
+		Where("restaurant_id = ? AND deleted_at IS NULL", id).
+		Scan(&stats).Error; err != nil {
+		return 0, 0, err
+	}
+
+	if err := db.Model(&model.Restaurant{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"avg_rating":   stats.Avg,
+			"rating_count": stats.Count,
+		}).Error; err != nil {
+		return 0, 0, err
+	}
+
+	return stats.Avg, stats.Count, nil
 }

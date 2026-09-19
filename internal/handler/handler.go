@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"html/template"
+	"io/fs"
 	"net/http"
 	"strings"
 	"time"
@@ -39,7 +41,8 @@ func NewHandler(
 }
 
 // SetupRouter 미들웨어, 정적 파일 서빙, 세션 및 라우트를 등록합니다.
-func (h *Handler) SetupRouter(r *gin.Engine) {
+// staticFS와 tmpl이 전달되면 바이너리에 내장된 embed 자원을 사용하고, 없으면 디스크 파일 시스템을 fallback으로 사용합니다.
+func (h *Handler) SetupRouter(r *gin.Engine, staticFS fs.FS, tmpl *template.Template) {
 	// 1. 세션 미들웨어 설정
 	store := cookie.NewStore([]byte(h.cfg.SessionSecret))
 	store.Options(sessions.Options{
@@ -59,9 +62,18 @@ func (h *Handler) SetupRouter(r *gin.Engine) {
 		c.Next()
 	})
 
-	// 3. 정적 파일 및 템플릿 로드
-	r.Static("/static", "./static")
-	r.LoadHTMLGlob("index.html")
+	// 3. 정적 파일 및 템플릿 로드 (내장 embed 자원 우선, 없을 경우 디스크 파일 탐색)
+	if staticFS != nil {
+		r.StaticFS("/static", http.FS(staticFS))
+	} else {
+		r.Static("/static", "./static")
+	}
+
+	if tmpl != nil {
+		r.SetHTMLTemplate(tmpl)
+	} else {
+		r.LoadHTMLGlob("index.html")
+	}
 
 	// 4. 라우트 등록
 	r.GET("/", h.Page.Index)
@@ -82,15 +94,15 @@ func (h *Handler) SetupRouter(r *gin.Engine) {
 	}
 }
 
-// getValidUserName 세션에서 사용자명을 조회하고 유효기간을 검증합니다.
-func getValidUserName(session sessions.Session) (string, bool) {
+// getValidUser 세션에서 사용자 식별자(userID)와 이름(userName)을 조회하고 유효기간을 검증합니다.
+func getValidUser(session sessions.Session) (string, string, bool) {
 	userNameVal := session.Get("userName")
 	if userNameVal == nil {
-		return "", false
+		return "", "", false
 	}
 	userName, ok := userNameVal.(string)
 	if !ok || userName == "" {
-		return "", false
+		return "", "", false
 	}
 
 	loginTimeVal := session.Get("loginTime")
@@ -99,9 +111,29 @@ func getValidUserName(session sessions.Session) (string, bool) {
 			if time.Now().Unix()-loginTime > config.SessionDuration {
 				session.Clear()
 				_ = session.Save()
-				return "", false
+				return "", "", false
 			}
 		}
 	}
-	return userName, true
+
+	userID := ""
+	if uidVal := session.Get("userID"); uidVal != nil {
+		if uid, ok := uidVal.(string); ok {
+			userID = uid
+		}
+	}
+	if userID == "" {
+		// 닉네임만 저장된 이전 세션은 소유권을 확인할 수 없으므로 재로그인합니다.
+		session.Clear()
+		_ = session.Save()
+		return "", "", false
+	}
+
+	return userID, userName, true
+}
+
+// getValidUserName 세션에서 사용자명을 조회하고 유효기간을 검증합니다.
+func getValidUserName(session sessions.Session) (string, bool) {
+	_, userName, ok := getValidUser(session)
+	return userName, ok
 }

@@ -21,8 +21,9 @@ func main() {
 	// 2. 로깅 시스템 초기화
 	setupLogger()
 
-	// 3. 데이터베이스 초기화
-	db, err := repository.InitDB(cfg.DatabasePath)
+	// 3. 데이터베이스 초기화 (embed된 restaurants.json 데이터 함께 주입)
+	seedJSON := getSeedRestaurantsJSON()
+	db, err := repository.InitDB(cfg.DatabasePath, seedJSON)
 	if err != nil {
 		log.Fatalf("FATAL 데이터베이스 초기화 실패: %v", err)
 	}
@@ -48,7 +49,16 @@ func main() {
 	r.Use(gin.Recovery())
 	r.Use(customLoggerMiddleware())
 
-	appHandler.SetupRouter(r)
+	staticFS, err := getStaticFS()
+	if err != nil {
+		log.Printf("WARN  내장 static FS 로드 실패: %v", err)
+	}
+	tmpl, err := getIndexTemplate()
+	if err != nil {
+		log.Printf("WARN  내장 index.html 로드 실패: %v", err)
+	}
+
+	appHandler.SetupRouter(r, staticFS, tmpl)
 
 	// 6. 서버 실행
 	log.Printf("INFO  서버가 %s 에서 리스닝 중입니다.\n", cfg.Addr())

@@ -1289,3 +1289,63 @@ input:checked + .slider:before {
         padding: 6px 10px;
     }
 }
+
+/* ==========================================
+   🍞 커스텀 모던 토스트(Toast) 알림 스타일
+   ========================================== */
+.toast-container {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 99999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    pointer-events: none;
+    max-width: 90%;
+    width: max-content;
+}
+
+.toast-message {
+    pointer-events: auto;
+    background: rgba(26, 28, 30, 0.92);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: #ffffff;
+    padding: 10px 18px;
+    border-radius: 30px;
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    opacity: 0;
+    transform: translateY(16px) scale(0.95);
+    transition: opacity 0.25s cubic-bezier(0.2, 0.9, 0.3, 1), transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.toast-message.show {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+.toast-message.toast-success {
+    border-left: 3px solid #2ecc71;
+}
+
+.toast-message.toast-error {
+    border-left: 3px solid #e74c3c;
+}
+
+.toast-message.toast-info {
+    border-left: 3px solid #3498db;
+}
+
+body.dark-mode .toast-message {
+    background: rgba(45, 52, 65, 0.94);
+    color: #f1f5f9;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+}

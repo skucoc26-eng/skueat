@@ -22,13 +22,8 @@ RUN apk --no-cache add ca-certificates
 
 WORKDIR /app
 
-# Copy binary from builder
+# Copy binary from builder (all assets and templates are self-contained via go:embed)
 COPY --from=builder /app/server .
-
-# Copy static HTML and assets from the cmd directory
-COPY cmd/index.html .
-COPY cmd/static/ ./static/
-COPY cmd/restaurants.json . 
 
 # Create data directory for SQLite persistent storage
 RUN mkdir -p /app/data

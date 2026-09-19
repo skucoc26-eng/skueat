@@ -3,6 +3,7 @@ package handler
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -71,6 +72,7 @@ func (h *AuthHandler) AuthKakaoCallback(c *gin.Context) {
 		return
 	}
 
+	session.Set("userID", fmt.Sprintf("kakao_%d", userInfo.ID))
 	session.Set("userName", userInfo.Properties.Nickname)
 	session.Set("loginTime", time.Now().Unix())
 	if err := session.Save(); err != nil {

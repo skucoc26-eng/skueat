@@ -25,7 +25,7 @@ func NewReviewHandler(svc service.ReviewService) *ReviewHandler {
 // AddReview 별점 평가 및 한 줄 평 등록 API (POST /api/rate)
 func (h *ReviewHandler) AddReview(c *gin.Context) {
 	session := sessions.Default(c)
-	userName, ok := getValidUserName(session)
+	userID, userName, ok := getValidUser(session)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "로그인이 필요하거나 세션이 만료되었습니다."})
 		return
@@ -37,8 +37,12 @@ func (h *ReviewHandler) AddReview(c *gin.Context) {
 		return
 	}
 
-	_, newAvg, err := h.svc.AddReview(req, userName)
+	_, newAvg, isUpdated, err := h.svc.AddReview(req, userID, userName)
 	if err != nil {
+		if errors.Is(err, service.ErrUnauthenticated) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			return
+		}
 		if errors.Is(err, service.ErrRestaurantNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "식당을 찾을 수 없습니다."})
 			return
@@ -51,9 +55,15 @@ func (h *ReviewHandler) AddReview(c *gin.Context) {
 		return
 	}
 
+	msg := "평가가 완료되었습니다."
+	if isUpdated {
+		msg = "기존 평가가 성공적으로 수정되었습니다."
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"message": "평가가 완료되었습니다.",
-		"new_avg": newAvg,
+		"message":    msg,
+		"new_avg":    newAvg,
+		"is_updated": isUpdated,
 	})
 }
 

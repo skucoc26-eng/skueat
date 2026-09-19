@@ -13,7 +13,7 @@ import (
 )
 
 // InitDB SQLite DB 연결 및 테이블 마이그레이션, 초기 시드 데이터를 적재합니다.
-func InitDB(dbPath string) (*gorm.DB, error) {
+func InitDB(dbPath string, embeddedSeed ...[]byte) (*gorm.DB, error) {
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
 	if err != nil {
 		return nil, err
@@ -28,24 +28,31 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 	var count int64
 	db.Model(&model.Restaurant{}).Count(&count)
 	if count == 0 {
-		loadInitialData(db)
+		var seedDataBytes []byte
+		if len(embeddedSeed) > 0 {
+			seedDataBytes = embeddedSeed[0]
+		}
+		loadInitialData(db, seedDataBytes)
 	}
 
 	return db, nil
 }
 
-func loadInitialData(db *gorm.DB) {
-	jsonFile, err := os.Open("restaurants.json")
-	if err != nil {
-		log.Println("restaurants.json 파일이 없거나 열 수 없습니다. 내장 샘플 데이터를 로드합니다.")
-		seedData(db)
-		return
-	}
-	defer jsonFile.Close()
+func loadInitialData(db *gorm.DB, embeddedSeed []byte) {
+	var byteValue []byte
 
-	byteValue, err := io.ReadAll(jsonFile)
-	if err != nil {
-		log.Println("restaurants.json 파일을 읽는 도중 오류가 발생했습니다. 내장 샘플 데이터를 로드합니다.")
+	// 1. 디스크 파일(restaurants.json) 우선 탐색
+	jsonFile, err := os.Open("restaurants.json")
+	if err == nil {
+		defer jsonFile.Close()
+		byteValue, _ = io.ReadAll(jsonFile)
+	} else if len(embeddedSeed) > 0 {
+		// 2. 디스크에 없으면 바이너리에 내장된 seed 데이터 사용
+		byteValue = embeddedSeed
+	}
+
+	if len(byteValue) == 0 {
+		log.Println("restaurants.json 데이터가 없습니다. 내장 샘플 데이터를 로드합니다.")
 		seedData(db)
 		return
 	}

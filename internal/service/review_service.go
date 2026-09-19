@@ -14,11 +14,12 @@ import (
 var (
 	ErrRestaurantNotFound = errors.New("식당을 찾을 수 없습니다")
 	ErrInvalidScore       = errors.New("별점은 1점에서 5점 사이여야 합니다")
+	ErrUnauthenticated    = errors.New("다시 로그인해 주세요")
 )
 
 // ReviewService 리뷰 및 평점 비즈니스 로직 인터페이스
 type ReviewService interface {
-	AddReview(req model.RateRequest, userName string) (*model.Rating, float64, error)
+	AddReview(req model.RateRequest, userID, userName string) (*model.Rating, float64, bool, error)
 	GetReviews(restaurantID uint) ([]model.ReviewResponse, error)
 }
 
@@ -37,21 +38,26 @@ func NewReviewService(db *gorm.DB, restRepo repository.RestaurantRepository, rev
 	}
 }
 
-// AddReview 트랜잭션을 통해 리뷰 등록 및 식당 통계(평균 평점, 참여 수)를 원자적으로 갱신
-func (s *reviewService) AddReview(req model.RateRequest, userName string) (*model.Rating, float64, error) {
+// AddReview 트랜잭션을 통해 1인 1리뷰(Upsert: 기존 리뷰 수정 또는 신규 생성) 및 식당 통계를 원자적으로 재계산
+func (s *reviewService) AddReview(req model.RateRequest, userID, userName string) (*model.Rating, float64, bool, error) {
 	if req.Score < 1 || req.Score > 5 {
-		return nil, 0, ErrInvalidScore
+		return nil, 0, false, ErrInvalidScore
+	}
+
+	if userID == "" {
+		return nil, 0, false, ErrUnauthenticated
 	}
 
 	authorName := DetermineAuthorName(req.AuthorType, req.CustomName, userName)
 
 	var rating model.Rating
 	var newAvg float64
+	var isUpdated bool
 
 	// 원자적 처리를 위한 DB 트랜잭션
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		// 1. 식당 존재 여부 및 현재 통계 조회
-		res, err := s.restaurantRepo.FindByIDWithTx(tx, req.RestaurantID)
+		// 1. 식당 존재 여부 확인
+		_, err := s.restaurantRepo.FindByIDWithTx(tx, req.RestaurantID)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return ErrRestaurantNotFound
@@ -59,35 +65,53 @@ func (s *reviewService) AddReview(req model.RateRequest, userName string) (*mode
 			return err
 		}
 
-		// 2. 신규 평균 평점 및 개수 산출
-		var newCount int
-		newAvg, newCount = CalculateNewRating(res.AvgRating, res.RatingCount, req.Score)
-
-		// 3. 리뷰 레코드 생성
-		rating = model.Rating{
-			RestaurantID: req.RestaurantID,
-			UserID:       userName,
-			AuthorName:   authorName,
-			Score:        req.Score,
-			Comment:      req.Comment,
-		}
-		if err := s.reviewRepo.CreateWithTx(tx, &rating); err != nil {
+		// 2. 해당 사용자의 기존 리뷰 여부 확인 (1인 1리뷰 정책)
+		existing, err := s.reviewRepo.FindByRestaurantAndUser(tx, req.RestaurantID, userID)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
 
-		// 4. 식당 통계 업데이트
-		if err := s.restaurantRepo.UpdateStatsWithTx(tx, req.RestaurantID, newAvg, newCount); err != nil {
+		if existing != nil {
+			// 기존 리뷰가 존재하면 수정 (Update)
+			existing.AuthorName = authorName
+			existing.Score = req.Score
+			existing.Comment = req.Comment
+			if err := s.reviewRepo.UpdateWithTx(tx, existing); err != nil {
+				return err
+			}
+			rating = *existing
+			isUpdated = true
+		} else {
+			// 기존 리뷰가 없으면 신규 등록 (Create)
+			rating = model.Rating{
+				RestaurantID: req.RestaurantID,
+				UserID:       userID,
+				AccountID:    userID,
+				AuthorName:   authorName,
+				Score:        req.Score,
+				Comment:      req.Comment,
+			}
+			if err := s.reviewRepo.CreateWithTx(tx, &rating); err != nil {
+				return err
+			}
+			isUpdated = false
+		}
+
+		// 3. 식당 통계(평균 평점 및 리뷰 개수)를 DB 레벨에서 원자적으로 재집계 및 갱신 (Lost Update 방지)
+		calcAvg, _, err := s.restaurantRepo.RecalculateStatsWithTx(tx, req.RestaurantID)
+		if err != nil {
 			return err
 		}
+		newAvg = calcAvg
 
 		return nil
 	})
 
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, false, err
 	}
 
-	return &rating, newAvg, nil
+	return &rating, newAvg, isUpdated, nil
 }
 
 // GetReviews 식당의 리뷰 목록 조회 (개인정보를 완전히 차단한 ReviewResponse DTO 반환)

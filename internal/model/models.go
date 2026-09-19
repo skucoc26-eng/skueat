@@ -15,18 +15,20 @@ type Restaurant struct {
 	X           float64 `json:"x"`
 	Y           float64 `json:"y"`
 	URL         string  `json:"url"`
-	AvgRating   float64 `json:"avg_rating" gorm:"default:0"`   // 평균 별점
-	RatingCount int     `json:"rating_count" gorm:"default:0"` // 참여 인원
+	AvgRating   float64 `json:"avg_rating" gorm:"column:avg_rating;default:0"`     // 평균 별점
+	RatingCount int     `json:"rating_count" gorm:"column:rating_count;default:0"` // 참여 인원
 }
 
 // Rating 별점 및 리뷰 기록 엔티티
 type Rating struct {
 	gorm.Model
-	RestaurantID uint   `json:"restaurant_id"`
-	UserID       string `json:"-"`           // 내부 식별용 (API 응답에서 절대 노출되지 않음)
-	AuthorName   string `json:"author_name"` // 화면에 표시될 닉네임 (마스킹, 익명, 실명 등)
-	Score        int    `json:"score"`
-	Comment      string `json:"comment" gorm:"type:text"` // 한 줄 평
+	RestaurantID uint `json:"restaurant_id" gorm:"index"`
+	// AccountID는 인증된 계정의 소유권입니다. 기존 UserID(닉네임)에서 자동 변환하지 않습니다.
+	AccountID  string `json:"-" gorm:"index"`
+	UserID     string `json:"-" gorm:"index"` // 내부 식별용 (API 응답에서 절대 노출되지 않음)
+	AuthorName string `json:"author_name"`    // 화면에 표시될 닉네임 (마스킹, 익명, 실명 등)
+	Score      int    `json:"score"`
+	Comment    string `json:"comment" gorm:"type:text"` // 한 줄 평
 }
 
 // ReviewResponse 클라이언트 공개용 리뷰 응답 DTO (사용자 실제 식별자 제외)

@@ -1,6 +1,8 @@
 package service
 
 import (
+	"encoding/json"
+	"errors"
 	"math"
 	"testing"
 
@@ -117,6 +119,11 @@ func TestAddReview_Transactional(t *testing.T) {
 	if err != ErrInvalidScore {
 		t.Errorf("expected ErrInvalidScore, got %v", err)
 	}
+	var invalidCount int64
+	db.Model(&model.Rating{}).Count(&invalidCount)
+	if invalidCount != 0 {
+		t.Errorf("invalid score persisted %d reviews, want 0", invalidCount)
+	}
 
 	// 2. 정상 별점 (2점) 등록 -> 트랜잭션 정상 커밋 및 평균 갱신 확인
 	// (4.0 * 1 + 2) / 2 = 3.0
@@ -161,5 +168,55 @@ func TestAddReview_Transactional(t *testing.T) {
 	}
 	if reviews[0].AuthorName != "익명" {
 		t.Errorf("expected AuthorName '익명', got %q", reviews[0].AuthorName)
+	}
+	encoded, err := json.Marshal(reviews)
+	if err != nil {
+		t.Fatalf("marshal reviews: %v", err)
+	}
+	var public []map[string]any
+	if err := json.Unmarshal(encoded, &public); err != nil {
+		t.Fatalf("unmarshal public reviews: %v", err)
+	}
+	if _, exposed := public[0]["user_id"]; exposed {
+		t.Fatal("public review response exposes user_id")
+	}
+}
+
+type failingStatsRepository struct {
+	repository.RestaurantRepository
+}
+
+func (f failingStatsRepository) UpdateStatsWithTx(_ *gorm.DB, _ uint, _ float64, _ int) error {
+	return errors.New("forced stats update failure")
+}
+
+func TestAddReviewRollsBackWhenStatsUpdateFails(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.Restaurant{}, &model.Rating{}); err != nil {
+		t.Fatal(err)
+	}
+	restaurant := model.Restaurant{Title: "rollback", AvgRating: 4, RatingCount: 1}
+	if err := db.Create(&restaurant).Error; err != nil {
+		t.Fatal(err)
+	}
+	base := repository.NewRestaurantRepository(db)
+	svc := NewReviewService(db, failingStatsRepository{base}, repository.NewReviewRepository(db))
+	if _, _, err := svc.AddReview(model.RateRequest{RestaurantID: restaurant.ID, Score: 2}, "tester"); err == nil {
+		t.Fatal("expected stats update failure")
+	}
+	var reviews int64
+	db.Model(&model.Rating{}).Count(&reviews)
+	if reviews != 0 {
+		t.Fatalf("transaction retained %d reviews, want 0", reviews)
+	}
+	var saved model.Restaurant
+	if err := db.First(&saved, restaurant.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if saved.AvgRating != 4 || saved.RatingCount != 1 {
+		t.Fatalf("restaurant stats changed after rollback: avg=%v count=%d", saved.AvgRating, saved.RatingCount)
 	}
 }

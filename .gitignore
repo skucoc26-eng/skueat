@@ -15,6 +15,7 @@ cmd/logs/*
 !cmd/logs/.gitkeep
 
 # SQLite Local DB
+cmd/restaurants.db
 *.db-journal
 *.db-wal
 *.db-shm
@@ -22,3 +23,6 @@ cmd/logs/*
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# Local credentials
+.env

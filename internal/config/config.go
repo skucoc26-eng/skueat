@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"log"
 	"os"
 	"strings"
@@ -43,8 +45,12 @@ func LoadConfig() *Config {
 
 	sessionSecret := os.Getenv("SESSION_SECRET")
 	if sessionSecret == "" {
-		log.Println("WARN  SESSION_SECRET 환경변수가 비어있어 기본값('secret')을 사용합니다. 실무 운영 환경에서는 반드시 유니크한 비밀키를 설정하십시오.")
-		sessionSecret = "secret"
+		key := make([]byte, 32)
+		if _, err := rand.Read(key); err != nil {
+			log.Fatalf("FATAL 세션 비밀키 생성 실패: %v", err)
+		}
+		sessionSecret = hex.EncodeToString(key)
+		log.Println("WARN  SESSION_SECRET 환경변수가 비어있어 임시 세션 키를 생성했습니다. 재시작 시 기존 로그인 세션이 만료됩니다.")
 	}
 
 	dbPath := os.Getenv("DATABASE_PATH")

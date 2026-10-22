@@ -24,6 +24,15 @@ function escapeHtml(str) {
         .replace(/'/g, '&#039;');
 }
 
+function safeRestaurantUrl(raw) {
+    try {
+        const url = new URL(String(raw));
+        return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : '#';
+    } catch {
+        return '#';
+    }
+}
+
 function initMap() {
     const container = document.getElementById('map');
     if (!container || !window.kakao || !window.kakao.maps) {
@@ -275,16 +284,16 @@ function renderList(data) {
 
         card.innerHTML = `
             <div class="res-card-header">
-                <span class="res-food-tag">#${item.food}</span>
+                <span class="res-food-tag">#${escapeHtml(item.food)}</span>
                 ${distanceHtml}
             </div>
-            <a class="res-title" href="${item.url}" target="_blank" onclick="event.stopPropagation()">${item.title}</a>
+            <a class="res-title" href="${escapeHtml(safeRestaurantUrl(item.url))}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${escapeHtml(item.title)}</a>
             <div class="rating-box">
                 <span class="star-display filled">★</span>
                 <span class="rating-score">${avg.toFixed(1)}</span>
                 <span class="rating-count">(${count})</span>
             </div>
-            <div class="res-addr">${item.addr}</div>
+            <div class="res-addr">${escapeHtml(item.addr)}</div>
             <div class="res-card-footer">
                 <button class="route-link-btn">🚙 길찾기</button>
             </div>
@@ -828,7 +837,7 @@ function runRouletteAnimation() {
     // 마지막에 당첨 항목을 주입하여 이곳에 정확히 멈추게 함
     rouletteItems.push(winner.title);
 
-    inner.innerHTML = rouletteItems.map(title => `<div class="roulette-item">${title}</div>`).join('');
+    inner.innerHTML = rouletteItems.map(title => `<div class="roulette-item">${escapeHtml(title)}</div>`).join('');
     
     // 강제 리플로우
     inner.style.transition = 'none';
@@ -845,7 +854,7 @@ function runRouletteAnimation() {
         
         if (resultBox) {
             resultBox.innerHTML = `
-                <div>🎉 오늘의 추천: <strong>${winner.title}</strong></div>
+                <div>🎉 오늘의 추천: <strong>${escapeHtml(winner.title)}</strong></div>
                 <button class="roulette-go-btn" id="btn-go-winner">📍 이 맛집 보러가기</button>
             `;
             resultBox.classList.add('show');

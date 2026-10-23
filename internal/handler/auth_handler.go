@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-contrib/sessions"
@@ -71,7 +72,12 @@ func (h *AuthHandler) AuthKakaoCallback(c *gin.Context) {
 		return
 	}
 
+	if userInfo.ID <= 0 {
+		c.String(http.StatusBadGateway, "유효하지 않은 카카오 사용자 정보입니다.")
+		return
+	}
 	session.Set("userName", userInfo.Properties.Nickname)
+	session.Set("kakaoUserID", strconv.FormatInt(userInfo.ID, 10))
 	session.Set("loginTime", time.Now().Unix())
 	if err := session.Save(); err != nil {
 		log.Printf("ERROR 세션 저장 실패: %v", err)

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -82,15 +83,19 @@ func (h *Handler) SetupRouter(r *gin.Engine) {
 	}
 }
 
-// getValidUserName 세션에서 사용자명을 조회하고 유효기간을 검증합니다.
-func getValidUserName(session sessions.Session) (string, bool) {
-	userNameVal := session.Get("userName")
-	if userNameVal == nil {
-		return "", false
-	}
-	userName, ok := userNameVal.(string)
+// getValidUser 세션에서 사용자명과 카카오 고유 ID를 조회하고 유효기간을 검증합니다.
+func getValidUser(session sessions.Session) (string, int64, bool) {
+	userName, ok := session.Get("userName").(string)
 	if !ok || userName == "" {
-		return "", false
+		return "", 0, false
+	}
+	userIDText, ok := session.Get("kakaoUserID").(string)
+	if !ok {
+		return "", 0, false
+	}
+	userID, err := strconv.ParseInt(userIDText, 10, 64)
+	if err != nil || userID <= 0 {
+		return "", 0, false
 	}
 
 	loginTimeVal := session.Get("loginTime")
@@ -99,9 +104,9 @@ func getValidUserName(session sessions.Session) (string, bool) {
 			if time.Now().Unix()-loginTime > config.SessionDuration {
 				session.Clear()
 				_ = session.Save()
-				return "", false
+				return "", 0, false
 			}
 		}
 	}
-	return userName, true
+	return userName, userID, true
 }

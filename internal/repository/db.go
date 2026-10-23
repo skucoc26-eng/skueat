@@ -2,9 +2,13 @@ package repository
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
@@ -26,12 +30,105 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 
 	// 데이터가 비어있는 경우 초기 데이터 적재
 	var count int64
-	db.Model(&model.Restaurant{}).Count(&count)
+	if err := db.Model(&model.Restaurant{}).Count(&count).Error; err != nil {
+		return nil, err
+	}
 	if count == 0 {
 		loadInitialData(db)
+	} else if err := syncRestaurantCatalog(db); err != nil {
+		return nil, err
 	}
 
 	return db, nil
+}
+
+// syncRestaurantCatalog updates catalog details while preserving restaurant IDs and ratings.
+func syncRestaurantCatalog(db *gorm.DB) error {
+	data, err := os.ReadFile("restaurants.json")
+	if err != nil {
+		log.Printf("WARN 식당 데이터 파일을 읽을 수 없어 기존 DB를 유지합니다: %v", err)
+		return nil
+	}
+	var samples []model.Restaurant
+	if err := json.Unmarshal(data, &samples); err != nil {
+		log.Printf("WARN 식당 데이터 파싱에 실패해 기존 DB를 유지합니다: %v", err)
+		return nil
+	}
+	if len(samples) == 0 {
+		log.Println("WARN 식당 데이터가 비어 있어 기존 DB를 유지합니다.")
+		return nil
+	}
+
+	var inserted, updated int
+	err = db.Transaction(func(tx *gorm.DB) error {
+		var existing []model.Restaurant
+		if err := tx.Find(&existing).Error; err != nil {
+			return err
+		}
+		byPlaceID := make(map[string][]model.Restaurant, len(existing))
+		for _, restaurant := range existing {
+			if id := kakaoPlaceID(restaurant.URL); id != "" {
+				byPlaceID[id] = append(byPlaceID[id], restaurant)
+			}
+		}
+
+		seen := make(map[string]bool, len(samples))
+		for _, sample := range samples {
+			id := kakaoPlaceID(sample.URL)
+			if id == "" {
+				return fmt.Errorf("invalid Kakao place URL for %q: %q", sample.Title, sample.URL)
+			}
+			if seen[id] {
+				return fmt.Errorf("duplicate Kakao place ID %s in restaurants.json", id)
+			}
+			seen[id] = true
+
+			matches := byPlaceID[id]
+			if len(matches) > 1 {
+				log.Printf("WARN Kakao 장소 ID %s가 DB에 중복되어 자동 갱신을 건너뜁니다.", id)
+				continue
+			}
+			if len(matches) == 1 {
+				err := tx.Model(&model.Restaurant{}).Where("id = ?", matches[0].ID).Updates(map[string]any{
+					"title": sample.Title, "addr": sample.Addr, "food": sample.Food,
+					"x": sample.X, "y": sample.Y, "url": sample.URL,
+				}).Error
+				if err != nil {
+					return err
+				}
+				updated++
+				continue
+			}
+			restaurant := model.Restaurant{
+				Title: sample.Title, Addr: sample.Addr, Food: sample.Food,
+				X: sample.X, Y: sample.Y, URL: sample.URL,
+			}
+			if err := tx.Create(&restaurant).Error; err != nil {
+				return err
+			}
+			inserted++
+		}
+		return nil
+	})
+	if err == nil {
+		log.Printf("식당 데이터 동기화 완료: %d개 추가, %d개 갱신", inserted, updated)
+	}
+	return err
+}
+
+func kakaoPlaceID(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || !strings.EqualFold(parsed.Hostname(), "place.map.kakao.com") {
+		return ""
+	}
+	id := strings.Trim(parsed.Path, "/")
+	if id == "" || strings.Contains(id, "/") {
+		return ""
+	}
+	if _, err := strconv.ParseUint(id, 10, 64); err != nil {
+		return ""
+	}
+	return id
 }
 
 func loadInitialData(db *gorm.DB) {

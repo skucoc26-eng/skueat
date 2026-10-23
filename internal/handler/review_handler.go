@@ -25,7 +25,7 @@ func NewReviewHandler(svc service.ReviewService) *ReviewHandler {
 // AddReview 별점 평가 및 한 줄 평 등록 API (POST /api/rate)
 func (h *ReviewHandler) AddReview(c *gin.Context) {
 	session := sessions.Default(c)
-	userName, ok := getValidUserName(session)
+	userName, userID, ok := getValidUser(session)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "로그인이 필요하거나 세션이 만료되었습니다."})
 		return
@@ -37,7 +37,7 @@ func (h *ReviewHandler) AddReview(c *gin.Context) {
 		return
 	}
 
-	_, newAvg, err := h.svc.AddReview(req, userName)
+	_, newAvg, err := h.svc.AddReview(req, userID, userName)
 	if err != nil {
 		if errors.Is(err, service.ErrRestaurantNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "식당을 찾을 수 없습니다."})
@@ -45,6 +45,10 @@ func (h *ReviewHandler) AddReview(c *gin.Context) {
 		}
 		if errors.Is(err, service.ErrInvalidScore) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "별점은 1점에서 5점 사이여야 합니다."})
+			return
+		}
+		if errors.Is(err, service.ErrAlreadyReviewed) {
+			c.JSON(http.StatusConflict, gin.H{"error": "이미 평가한 식당입니다."})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "평가를 저장하는 도중 오류가 발생했습니다."})

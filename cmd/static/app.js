@@ -5,6 +5,7 @@ let userLocOverlay = null;
 let userCircle = null;
 let isGpsActive = false;
 let currentRestaurants = []; // 룰렛/랜덤 매칭에 사용될 현재 필터링된 맛집 목록 캐시
+let latestRestaurantRequest = 0; // 이전 검색 응답이 새 검색 결과를 덮지 않도록 요청 순서 추적
 let isRouletteRunning = false;
 let activeTooltipOverlay = null; // 현재 지도 위에 표시 중인 식당 이름 말풍선 오버레이
 let showMarkers = true; // 지도 위의 음식점 마커들의 전체 표시 여부
@@ -37,6 +38,7 @@ function initMap() {
     const container = document.getElementById('map');
     if (!container || !window.kakao || !window.kakao.maps) {
         console.warn("카카오 지도 SDK가 로드되지 않아 지도 초기화를 건너뜁니다.");
+        if (container) container.textContent = '지도를 불러올 수 없습니다. 음식점 목록과 검색은 계속 사용할 수 있습니다.';
         return;
     }
 
@@ -185,6 +187,11 @@ function requestUserLocation() {
                 gpsBtn.innerHTML = "📍";
             }
 
+            if (!map || !window.kakao || !window.kakao.maps) {
+                applySearch();
+                return;
+            }
+
             const locPosition = new kakao.maps.LatLng(lat, lng);
 
             // 내 위치 마커 그리기
@@ -236,11 +243,13 @@ function requestUserLocation() {
 }
 
 async function fetchData(category = 'all', search = '') {
-    const url = `/api/restaurants?category=${category}&search=${search}`;
+    const requestID = ++latestRestaurantRequest;
+    const url = `/api/restaurants?${new URLSearchParams({ category, search })}`;
     try {
         const response = await fetch(url);
         const data = await response.json();
-        
+        if (requestID !== latestRestaurantRequest) return;
+
         // 내 위치 정보가 있으면 거리 계산 및 소팅 적용
         if (userCoords) {
             data.forEach(item => {
@@ -309,6 +318,9 @@ function renderList(data) {
                 goRoute(item, e);
             });
         }
+
+        // 지도 SDK가 없어도 목록·검색은 계속 사용할 수 있습니다.
+        if (!map || !window.kakao || !window.kakao.maps) return;
 
         // 지도 위의 커스텀 핀 오버레이 마커 만들기
         const pos = new kakao.maps.LatLng(item.y, item.x);
@@ -548,40 +560,41 @@ function focusOn(item, cardElement) {
     if (!cardElement) return;
     cardElement.classList.add('active');
 
-    // 2. 지도 위 마커 활성화 상태 토글
-    mapMarkers.forEach(marker => {
-        const el = marker.getContent();
-        if (el && el.classList) el.classList.remove('active');
-        marker.setZIndex(1);
-    });
-
-    if (item.overlay) {
-        item.overlay.setZIndex(999);
-        const el = item.overlay.getContent();
-        if (el && el.classList) el.classList.add('active');
-    }
-
-    const pos = new kakao.maps.LatLng(item.y, item.x);
-    map.setLevel(2); // 지도를 디테일하게 줌인 (기본 3에서 2로 줌인 최적화)
-    map.panTo(pos);
-
-    // 💡 식당 이름 툴팁 오버레이 띄우기 (마커 온 상태일때만)
-    if (activeTooltipOverlay) {
-        activeTooltipOverlay.setMap(null);
-        activeTooltipOverlay = null;
-    }
-    
-    if (showMarkers) {
-        const tooltipEl = document.createElement('div');
-        tooltipEl.className = 'pin-name-tooltip';
-        tooltipEl.textContent = item.title;
-
-        activeTooltipOverlay = new kakao.maps.CustomOverlay({
-            position: pos,
-            content: tooltipEl,
-            yAnchor: 2.1
+    // 2. 지도를 사용할 수 있을 때만 마커와 위치를 갱신합니다.
+    if (map && window.kakao && window.kakao.maps) {
+        mapMarkers.forEach(marker => {
+            const el = marker.getContent();
+            if (el && el.classList) el.classList.remove('active');
+            marker.setZIndex(1);
         });
-        activeTooltipOverlay.setMap(map);
+
+        if (item.overlay) {
+            item.overlay.setZIndex(999);
+            const el = item.overlay.getContent();
+            if (el && el.classList) el.classList.add('active');
+        }
+
+        const pos = new kakao.maps.LatLng(item.y, item.x);
+        map.setLevel(2);
+        map.panTo(pos);
+
+        if (activeTooltipOverlay) {
+            activeTooltipOverlay.setMap(null);
+            activeTooltipOverlay = null;
+        }
+
+        if (showMarkers) {
+            const tooltipEl = document.createElement('div');
+            tooltipEl.className = 'pin-name-tooltip';
+            tooltipEl.textContent = item.title;
+
+            activeTooltipOverlay = new kakao.maps.CustomOverlay({
+                position: pos,
+                content: tooltipEl,
+                yAnchor: 2.1
+            });
+            activeTooltipOverlay.setMap(map);
+        }
     }
 
     // 3. 한 줄 평 레이아웃 생성 및 마운트

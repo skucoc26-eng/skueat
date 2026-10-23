@@ -115,7 +115,7 @@ func TestAddReview_Transactional(t *testing.T) {
 	_, _, err = svc.AddReview(model.RateRequest{
 		RestaurantID: testRes.ID,
 		Score:        6,
-	}, "홍길동")
+	}, 123, "홍길동")
 	if err != ErrInvalidScore {
 		t.Errorf("expected ErrInvalidScore, got %v", err)
 	}
@@ -132,7 +132,7 @@ func TestAddReview_Transactional(t *testing.T) {
 		Score:        2,
 		Comment:      "맛있어요",
 		AuthorType:   "anon",
-	}, "홍길동")
+	}, 123, "홍길동")
 
 	if err != nil {
 		t.Fatalf("AddReview failed: %v", err)
@@ -182,6 +182,38 @@ func TestAddReview_Transactional(t *testing.T) {
 	}
 }
 
+func TestAddReviewUsesKakaoIDInsteadOfNickname(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.Restaurant{}, &model.Rating{}); err != nil {
+		t.Fatal(err)
+	}
+	restaurant := model.Restaurant{Title: "테스트 식당"}
+	if err := db.Create(&restaurant).Error; err != nil {
+		t.Fatal(err)
+	}
+	svc := NewReviewService(db, repository.NewRestaurantRepository(db), repository.NewReviewRepository(db))
+	req := model.RateRequest{RestaurantID: restaurant.ID, Score: 5}
+	if _, _, err := svc.AddReview(req, 111, "같은 닉네임"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.AddReview(req, 222, "같은 닉네임"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.AddReview(req, 111, "다른 닉네임"); !errors.Is(err, ErrAlreadyReviewed) {
+		t.Fatalf("duplicate account error=%v, want ErrAlreadyReviewed", err)
+	}
+	var count int64
+	if err := db.Model(&model.Rating{}).Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 {
+		t.Fatalf("ratings=%d, want 2", count)
+	}
+}
+
 type failingStatsRepository struct {
 	repository.RestaurantRepository
 }
@@ -204,7 +236,7 @@ func TestAddReviewRollsBackWhenStatsUpdateFails(t *testing.T) {
 	}
 	base := repository.NewRestaurantRepository(db)
 	svc := NewReviewService(db, failingStatsRepository{base}, repository.NewReviewRepository(db))
-	if _, _, err := svc.AddReview(model.RateRequest{RestaurantID: restaurant.ID, Score: 2}, "tester"); err == nil {
+	if _, _, err := svc.AddReview(model.RateRequest{RestaurantID: restaurant.ID, Score: 2}, 123, "tester"); err == nil {
 		t.Fatal("expected stats update failure")
 	}
 	var reviews int64

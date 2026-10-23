@@ -28,7 +28,7 @@ func (s *stubAuthService) GetToken(string) (*model.KakaoTokenResponse, error) {
 }
 
 func (s *stubAuthService) GetUserInfo(string) (*model.KakaoUserResponse, error) {
-	res := &model.KakaoUserResponse{}
+	res := &model.KakaoUserResponse{ID: 123}
 	res.Properties.Nickname = "테스터"
 	return res, nil
 }
@@ -41,6 +41,14 @@ func TestKakaoOAuthState(t *testing.T) {
 	h := NewAuthHandler(auth)
 	router.GET("/login/kakao", h.LoginKakao)
 	router.GET("/auth/kakao/callback", h.AuthKakaoCallback)
+	router.GET("/me", func(c *gin.Context) {
+		name, id, ok := getValidUser(sessions.Default(c))
+		if !ok || name != "테스터" || id != 123 {
+			c.Status(http.StatusUnauthorized)
+			return
+		}
+		c.Status(http.StatusOK)
+	})
 
 	login := httptest.NewRecorder()
 	router.ServeHTTP(login, httptest.NewRequest(http.MethodGet, "/login/kakao", nil))
@@ -82,6 +90,15 @@ func TestKakaoOAuthState(t *testing.T) {
 	}
 	if auth.tokenCalls != 1 {
 		t.Fatalf("valid state exchanged token %d times, want 1", auth.tokenCalls)
+	}
+	me := httptest.NewRecorder()
+	meRequest := httptest.NewRequest(http.MethodGet, "/me", nil)
+	for _, cookie := range valid.Result().Cookies() {
+		meRequest.AddCookie(cookie)
+	}
+	router.ServeHTTP(me, meRequest)
+	if me.Code != http.StatusOK {
+		t.Fatalf("authenticated profile returned %d, want 200", me.Code)
 	}
 	if got := callback(state, valid.Result().Cookies()); got.Code != http.StatusBadRequest {
 		t.Fatalf("replayed state returned %d, want 400", got.Code)

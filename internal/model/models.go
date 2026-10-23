@@ -22,7 +22,8 @@ type Restaurant struct {
 // Rating 별점 및 리뷰 기록 엔티티
 type Rating struct {
 	gorm.Model
-	RestaurantID uint   `json:"restaurant_id"`
+	RestaurantID uint   `json:"restaurant_id" gorm:"uniqueIndex:idx_rating_kakao_user"`
+	KakaoUserID  *int64 `json:"-" gorm:"uniqueIndex:idx_rating_kakao_user"`
 	UserID       string `json:"-"`           // 내부 식별용 (API 응답에서 절대 노출되지 않음)
 	AuthorName   string `json:"author_name"` // 화면에 표시될 닉네임 (마스킹, 익명, 실명 등)
 	Score        int    `json:"score"`

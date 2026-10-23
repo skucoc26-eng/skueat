@@ -40,6 +40,7 @@ func TestRateEndpointValidationAndPublicReview(t *testing.T) {
 	router.GET("/test-login", func(c *gin.Context) {
 		session := sessions.Default(c)
 		session.Set("userName", "테스터")
+		session.Set("kakaoUserID", "123")
 		session.Set("loginTime", time.Now().Unix())
 		if err := session.Save(); err != nil {
 			t.Fatal(err)
@@ -84,6 +85,9 @@ func TestRateEndpointValidationAndPublicReview(t *testing.T) {
 	}
 	if got := post(form, cookies); got.Code != http.StatusOK {
 		t.Fatalf("valid rate status=%d, body=%s", got.Code, got.Body.String())
+	}
+	if got := post(form, cookies); got.Code != http.StatusConflict {
+		t.Fatalf("duplicate rate status=%d, want 409", got.Code)
 	}
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/reviews?restaurant_id=1", nil))

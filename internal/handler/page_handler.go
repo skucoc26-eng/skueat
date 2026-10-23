@@ -22,7 +22,7 @@ func NewPageHandler(cfg *config.Config) *PageHandler {
 // Index 메인 페이지 렌더링 (GET /)
 func (h *PageHandler) Index(c *gin.Context) {
 	session := sessions.Default(c)
-	userName, isLoggedIn := getValidUserName(session)
+	userName, _, isLoggedIn := getValidUser(session)
 
 	c.HTML(http.StatusOK, "index.html", gin.H{
 		"ApiKey":     h.cfg.KakaoAPIKey,

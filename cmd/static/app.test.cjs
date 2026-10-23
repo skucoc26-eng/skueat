@@ -135,3 +135,48 @@ test('roulette escapes restaurant titles in animation and result', () => {
     assert.match(result.innerHTML, /&lt;img src=x onerror=alert\(1\)&gt;/);
     assert.doesNotMatch(inner.innerHTML + result.innerHTML, /<img/i);
 });
+
+test('list remains available when Kakao Maps SDK fails to load', async () => {
+    const inserted = [];
+    const list = { innerHTML: '', appendChild(card) { inserted.push(card); } };
+    const { context } = loadApp({
+        console: { warn() {}, error() {} },
+        document: {
+            addEventListener() {},
+            getElementById(id) { return id === 'res-list' ? list : { textContent: '' }; },
+            createElement() { return { dataset: {}, innerHTML: '', querySelector() { return null; }, addEventListener() {} }; },
+        },
+        fetch: async () => ({ json: async () => [
+            { ID: 1, title: '첫째', food: '한식', addr: 'A', url: 'https://example.test/1', x: 126.93, y: 37.38 },
+            { ID: 2, title: '둘째', food: '한식', addr: 'B', url: 'https://example.test/2', x: 126.94, y: 37.39 },
+        ] }),
+    });
+    await vm.runInContext('fetchData()', context);
+    assert.equal(inserted.length, 2);
+});
+
+test('search query preserves special characters', async () => {
+    let requested;
+    const { context } = loadApp({
+        document: { addEventListener() {}, getElementById() { return { innerHTML: '', textContent: '' }; } },
+        fetch: async url => { requested = url; return { json: async () => [] }; },
+    });
+    await vm.runInContext("fetchData('all', 'A&B')", context);
+    assert.equal(new URL(requested, 'https://example.test').searchParams.get('search'), 'A&B');
+});
+
+test('older search response cannot replace the latest result', async () => {
+    const pending = [];
+    const { context } = loadApp({
+        fetch: () => new Promise(resolve => pending.push(resolve)),
+    });
+    context.rendered = [];
+    vm.runInContext('renderList = data => { rendered = data.map(item => item.title); }', context);
+    const first = vm.runInContext("fetchData('all', 'A')", context);
+    const second = vm.runInContext("fetchData('all', 'B')", context);
+    pending[1]({ json: async () => [{ title: 'B' }] });
+    await second;
+    pending[0]({ json: async () => [{ title: 'A' }] });
+    await first;
+    assert.equal(context.rendered[0], 'B');
+});

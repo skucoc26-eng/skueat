@@ -14,11 +14,13 @@ import (
 var (
 	ErrRestaurantNotFound = errors.New("식당을 찾을 수 없습니다")
 	ErrInvalidScore       = errors.New("별점은 1점에서 5점 사이여야 합니다")
+	ErrAlreadyReviewed    = errors.New("이미 평가한 식당입니다")
+	ErrInvalidUserID      = errors.New("유효하지 않은 사용자 ID입니다")
 )
 
 // ReviewService 리뷰 및 평점 비즈니스 로직 인터페이스
 type ReviewService interface {
-	AddReview(req model.RateRequest, userName string) (*model.Rating, float64, error)
+	AddReview(req model.RateRequest, userID int64, userName string) (*model.Rating, float64, error)
 	GetReviews(restaurantID uint) ([]model.ReviewResponse, error)
 }
 
@@ -38,7 +40,10 @@ func NewReviewService(db *gorm.DB, restRepo repository.RestaurantRepository, rev
 }
 
 // AddReview 트랜잭션을 통해 리뷰 등록 및 식당 통계(평균 평점, 참여 수)를 원자적으로 갱신
-func (s *reviewService) AddReview(req model.RateRequest, userName string) (*model.Rating, float64, error) {
+func (s *reviewService) AddReview(req model.RateRequest, userID int64, userName string) (*model.Rating, float64, error) {
+	if userID <= 0 {
+		return nil, 0, ErrInvalidUserID
+	}
 	if req.Score < 1 || req.Score > 5 {
 		return nil, 0, ErrInvalidScore
 	}
@@ -59,6 +64,14 @@ func (s *reviewService) AddReview(req model.RateRequest, userName string) (*mode
 			return err
 		}
 
+		alreadyReviewed, err := s.reviewRepo.ExistsByRestaurantAndKakaoUserIDWithTx(tx, req.RestaurantID, userID)
+		if err != nil {
+			return err
+		}
+		if alreadyReviewed {
+			return ErrAlreadyReviewed
+		}
+
 		// 2. 신규 평균 평점 및 개수 산출
 		var newCount int
 		newAvg, newCount = CalculateNewRating(res.AvgRating, res.RatingCount, req.Score)
@@ -66,12 +79,16 @@ func (s *reviewService) AddReview(req model.RateRequest, userName string) (*mode
 		// 3. 리뷰 레코드 생성
 		rating = model.Rating{
 			RestaurantID: req.RestaurantID,
+			KakaoUserID:  &userID,
 			UserID:       userName,
 			AuthorName:   authorName,
 			Score:        req.Score,
 			Comment:      req.Comment,
 		}
 		if err := s.reviewRepo.CreateWithTx(tx, &rating); err != nil {
+			if errors.Is(err, repository.ErrRatingConflict) {
+				return ErrAlreadyReviewed
+			}
 			return err
 		}
 

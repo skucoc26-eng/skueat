@@ -20,6 +20,7 @@ type Handler struct {
 	Restaurant *RestaurantHandler
 	Review     *ReviewHandler
 	Auth       *AuthHandler
+	Admin      *AdminHandler
 }
 
 // NewHandler 통합 Handler 생성
@@ -80,6 +81,9 @@ func (h *Handler) SetupRouter(r *gin.Engine) {
 		auth.GET("/login/kakao", h.Auth.LoginKakao)
 		auth.GET("/auth/kakao/callback", h.Auth.AuthKakaoCallback)
 		auth.GET("/logout", h.Auth.Logout)
+	}
+	if h.Admin != nil {
+		h.Admin.Register(r)
 	}
 }
 

@@ -388,6 +388,7 @@ function renderList(data) {
 // 특정 맛집의 설정된 전용 길찾기 링크 실행
 function goRoute(item, event) {
     if (event) event.stopPropagation();
+    window.skueatTrack?.('directions', { restaurant_id: item.ID });
     
     const pref = localStorage.getItem('navi-pref') || 'kakaomap';
     
@@ -558,6 +559,7 @@ function focusOn(item, cardElement) {
     });
 
     if (!cardElement) return;
+    window.skueatTrack?.('detail', { restaurant_id: item.ID });
     cardElement.classList.add('active');
 
     // 2. 지도를 사용할 수 있을 때만 마커와 위치를 갱신합니다.
@@ -718,6 +720,7 @@ function expandBottomSheet(targetPercent = 70) {
 }
 
 function applyFilter(category, btn) {
+    window.skueatTrack?.('category', { category });
     document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
 
@@ -754,6 +757,7 @@ function applySearch() {
     expandBottomSheet(70);
 
     const keyword = input ? input.value.trim() : '';
+    if (keyword) window.skueatTrack?.('search', { query: keyword.slice(0, 80), category });
     fetchData(category === 'all' ? 'all' : category, keyword);
 }
 
@@ -838,6 +842,7 @@ function runRouletteAnimation() {
     // 1. 당첨 맛집 선정
     const winnerIndex = Math.floor(Math.random() * candidates.length);
     const winner = candidates[winnerIndex];
+    window.skueatTrack?.('roulette', { restaurant_id: winner.ID });
 
     // 2. 흐르는 애니메이션을 위한 아이템 어레이 조립 (30개 배치)
     const totalItems = 30;

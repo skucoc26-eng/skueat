@@ -194,6 +194,32 @@ docker run -d -p 8080:8080 \
   --name skueat-app skueat
 ```
 
+### 관리자 및 이용 통계
+
+- `/admin`에서 별도 관리자 계정으로 로그인합니다. 세션은 4시간이며 로그아웃·비밀번호 교체로 무효화됩니다.
+- 리뷰는 사유를 입력하여 숨김/복구합니다. 숨김 리뷰는 공개 목록·평점에서 제외되며 원문과 관리 이력은 보존합니다. 낮은 별점 자체는 삭제 사유가 아닙니다.
+- 최근 7/30/90일 방문수, 익명 브라우저 수, 일별 추이, 검색어, 카테고리, 식당 상세조회·길찾기·룰렛, `utm_source`별 유입을 확인할 수 있습니다.
+- 방문자는 실제 사람 수가 아닌 90일 쿠키 기준 추정치입니다. IP·위치·카카오 계정과 연결하지 않고 원시 이벤트는 90일 보관합니다. 설정의 **이용 통계 수집 끄기**로 수집을 거부할 수 있습니다. 브라우저/차단기/네트워크 오류 때문에 일부 행동이 누락될 수 있습니다.
+- 검색어와 식당 클릭은 구분됩니다. 길찾기 클릭을 실제 매장 방문으로 집계하지 않습니다. 통계 수집 전의 방문자나 검색 기록은 소급 생성하지 않습니다.
+
+관리자 비밀번호는 저장소 밖의 로컬 파일로 생성합니다. 파일에는 평문 비밀번호가 있으므로 공유하지 마세요.
+
+```powershell
+go run ./cmd/admin-password -output "$env:LOCALAPPDATA\skueat-admin\admin-credentials.json"
+$admin = Get-Content "$env:LOCALAPPDATA\skueat-admin\admin-credentials.json" -Raw | ConvertFrom-Json
+@("ADMIN_USERNAME=$($admin.username)", "ADMIN_PASSWORD_HASH=$($admin.password_hash)") | flyctl secrets import -a skueat --stage
+flyctl deploy
+```
+
+환경변수 `ADMIN_USERNAME`(기본 `admin`)과 `ADMIN_PASSWORD_HASH`(bcrypt)를 설정하면 활성화됩니다. 해시가 없거나 잘못되면 관리자 로그인은 닫힙니다. 계정 변경 시 새 자격 증명 파일을 생성하여 해시를 교체합니다. `SESSION_SECRET`도 운영에서 고정 설정해야 합니다.
+
+관리자 변경 API와 로그인에는 CSRF 토큰·정확한 Origin 검증이 적용되며, 반복 실패는 분당 10회로 제한합니다(현재 단일 서버 기준). 관리자 접속은 통계에서 제외합니다. 클라이언트 이벤트는 위변조 가능한 운영 참고 자료이며 과금이나 보안 탐지의 근거로 사용하지 않습니다.
+
+```sh
+go test ./...
+node --test cmd/static/*.test.cjs
+```
+
 ### Fly.io 배포
 
 이 프로젝트는 `fly.toml`과 GitHub Actions 워크플로우를 통해 Fly.io 배포가 구성되어 있습니다.

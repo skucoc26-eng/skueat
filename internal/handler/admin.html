@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>스쿠잇 관리자</title><link rel="stylesheet" href="/static/admin.css"><script src="/static/admin.js" defer></script></head>
+<body>
+<header><a href="/">🍽 스쿠잇</a><span>운영 관리</span><button id="logout" hidden>로그아웃</button></header>
+<main>
+<p id="message" role="status" aria-live="polite"></p>
+<section id="login-panel" class="login-panel">
+<p class="eyebrow">SKUEAT ADMIN</p><h1>관리자 로그인</h1><p>방문 통계와 리뷰를 한곳에서 관리하세요.</p>
+<form id="login-form"><label>아이디<input id="username" name="username" autocomplete="username" required maxlength="80"></label><label>비밀번호<input id="password" name="password" type="password" autocomplete="current-password" required maxlength="72"></label><button type="submit">로그인</button></form>
+</section>
+<div id="dashboard" hidden>
+<div class="title-row"><div><p class="eyebrow">OVERVIEW</p><h1>스쿠잇 운영 현황</h1><p id="tracking-note"></p></div><label>조회 기간<select id="days"><option value="7">최근 7일</option><option value="30">최근 30일</option><option value="90">최근 90일</option></select></label><button id="refresh">새로고침</button></div>
+<p class="note">방문은 페이지 열림, 방문자는 90일 쿠키로 구분한 익명 브라우저 수입니다. 기기·브라우저 변경, 쿠키 삭제, 수집 거부, 봇 등에 따라 실제 사람 수와 다를 수 있습니다. 관리자 로그인 중 활동은 제외합니다.</p>
+<section class="metrics" id="metrics" aria-label="주요 지표"></section>
+<section class="panel"><h2>일별 방문 추이</h2><div id="daily-chart" class="chart"></div><details><summary>일별 숫자 보기</summary><div id="daily-table" class="table-wrap"></div></details></section>
+<div class="grid"><section class="panel"><h2>많이 입력한 검색어</h2><p class="note">입력한 검색어이며, 식당 방문을 의미하지 않습니다.</p><div id="queries"></div></section><section class="panel"><h2>카테고리 선택</h2><div id="categories"></div></section><section class="panel"><h2>유입 경로</h2><p class="note">홍보 링크의 utm_source 기준입니다.</p><div id="sources"></div></section></div>
+<section class="panel"><h2>관심을 받은 음식점</h2><p class="note">상세조회 / 길찾기 클릭 / 룰렛 선정 횟수입니다. 실제 매장 방문 수는 아닙니다.</p><div id="restaurants" class="table-wrap"></div></section>
+<section class="panel"><div class="title-row"><div><p class="eyebrow">MODERATION</p><h2>리뷰 관리</h2></div></div><p class="note">숨김 처리하면 공개 리뷰와 평점에서 제외되며 복구할 수 있습니다. 낮은 별점과 비판 의견도 존중하고 욕설·스팸·개인정보 노출 등 관리 사유를 기록하세요.</p>
+<form id="review-filter" class="filters"><label>표시 상태<select id="review-status"><option value="all">전체</option><option value="visible">공개</option><option value="hidden">숨김</option></select></label><label>식당 / 리뷰 검색<input id="review-search" maxlength="80" type="search" placeholder="음식점 또는 내용"></label><button>조회</button></form><div id="reviews"></div><div class="pagination"><button id="previous">이전</button><span id="review-page"></span><button id="next">다음</button></div></section>
+<section class="panel"><h2>최근 관리 이력</h2><div id="audit" class="table-wrap"></div></section>
+</div>
+</main></body></html>

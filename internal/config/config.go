@@ -15,13 +15,15 @@ const SessionDuration = 7 * 24 * 3600
 
 // Config 애플리케이션 전역 환경 설정 구조체
 type Config struct {
-	KakaoAPIKey   string
-	RestAPIKey    string
-	AppDomain     string
-	AppHost       string
-	AppPort       string
-	SessionSecret string
-	DatabasePath  string
+	KakaoAPIKey       string
+	RestAPIKey        string
+	AppDomain         string
+	AppHost           string
+	AppPort           string
+	SessionSecret     string
+	DatabasePath      string
+	AdminUsername     string
+	AdminPasswordHash string
 }
 
 // LoadConfig .env 파일을 읽어들여 Config 구조체로 반환
@@ -59,13 +61,15 @@ func LoadConfig() *Config {
 	}
 
 	return &Config{
-		KakaoAPIKey:   os.Getenv("KAKAO_API_KEY"),
-		RestAPIKey:    os.Getenv("REST_API_KEY"),
-		AppDomain:     appDomain,
-		AppHost:       appHost,
-		AppPort:       appPort,
-		SessionSecret: sessionSecret,
-		DatabasePath:  dbPath,
+		KakaoAPIKey:       os.Getenv("KAKAO_API_KEY"),
+		RestAPIKey:        os.Getenv("REST_API_KEY"),
+		AppDomain:         appDomain,
+		AppHost:           appHost,
+		AppPort:           appPort,
+		SessionSecret:     sessionSecret,
+		DatabasePath:      dbPath,
+		AdminUsername:     os.Getenv("ADMIN_USERNAME"),
+		AdminPasswordHash: os.Getenv("ADMIN_PASSWORD_HASH"),
 	}
 }
 

@@ -42,6 +42,7 @@ func main() {
 	authHandler := handler.NewAuthHandler(authSvc)
 
 	appHandler := handler.NewHandler(cfg, pageHandler, restHandler, revHandler, authHandler)
+	appHandler.Admin = handler.NewAdminHandler(cfg, db)
 
 	// 5. Gin 엔진 생성 및 미들웨어/라우터 구성
 	r := gin.New()

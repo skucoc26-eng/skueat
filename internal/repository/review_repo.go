@@ -29,7 +29,7 @@ func NewReviewRepository(db *gorm.DB) ReviewRepository {
 
 func (r *reviewRepository) FindByRestaurantID(restaurantID uint) ([]model.Rating, error) {
 	var reviews []model.Rating
-	if err := r.db.Where("restaurant_id = ?", restaurantID).Order("id desc").Find(&reviews).Error; err != nil {
+	if err := r.db.Where("restaurant_id = ? AND hidden = ?", restaurantID, false).Order("id desc").Find(&reviews).Error; err != nil {
 		return nil, err
 	}
 	return reviews, nil

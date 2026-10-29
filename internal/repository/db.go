@@ -22,6 +22,12 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, err
+	}
+	// SQLite has one writer; sharing one connection prevents deferred transaction upgrade conflicts.
+	sqlDB.SetMaxOpenConns(1)
 
 	// 테이블 자동 마이그레이션
 	if err := db.AutoMigrate(&model.Restaurant{}, &model.Rating{}, &model.ReviewModeration{}, &model.UsageEvent{}, &model.AdminSession{}); err != nil {

@@ -2,6 +2,8 @@ package service
 
 import (
 	"errors"
+	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -159,5 +161,40 @@ func TestUsageRateLimit(t *testing.T) {
 	}
 	if err := s.RecordEvent(model.UsageEvent{Visitor: "a", Type: "page_view"}, now); !errors.Is(err, ErrUsageLimit) {
 		t.Fatalf("rate limit=%v", err)
+	}
+}
+
+func TestConcurrentUsageWrites(t *testing.T) {
+	db, err := repository.InitDB(filepath.Join(t.TempDir(), "concurrent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, _ := db.DB()
+	defer sqlDB.Close()
+	s := NewManagementService(db)
+	now := time.Now()
+	start := make(chan struct{})
+	failures := make(chan error, 12)
+	var wg sync.WaitGroup
+	for i := 0; i < 12; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			failures <- s.RecordEvent(model.UsageEvent{Visitor: "concurrent", Type: "page_view"}, now)
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(failures)
+	for err := range failures {
+		if err != nil {
+			t.Fatalf("concurrent event was lost: %v", err)
+		}
+	}
+	var count int64
+	db.Model(&model.UsageEvent{}).Count(&count)
+	if count != 12 {
+		t.Fatalf("stored %d/12 events", count)
 	}
 }

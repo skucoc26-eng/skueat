@@ -3,16 +3,21 @@ let csrf = '';
 let reviewPage = 1;
 let statsRequest = 0;
 let reviewsRequest = 0;
+let isOwner = false, userPage = 1, usersRequest = 0, roleAuditRequest = 0;
 const $ = id => document.getElementById(id);
 const number = value => Number(value || 0).toLocaleString('ko-KR');
 function message(text, error = false) { $('message').textContent = text; $('message').className = error ? 'error' : ''; }
-function lock() { $('dashboard').hidden = true; $('login-panel').hidden = false; $('logout').hidden = true; }
-function unlock() { $('dashboard').hidden = false; $('login-panel').hidden = true; $('logout').hidden = false; }
+function lock() {
+    isOwner = false; ++usersRequest; ++roleAuditRequest; ++reviewsRequest; ++statsRequest;
+    $('dashboard').hidden = true; $('login-panel').hidden = false; $('logout').hidden = true;
+    $('user-management').hidden = true; $('users').replaceChildren(); $('role-audit').replaceChildren();
+}
+function unlock() { $('dashboard').hidden = false; $('login-panel').hidden = true; $('logout').hidden = false; $('user-management').hidden = !isOwner; $('access-label').textContent = isOwner ? '관리자' : '운영자'; }
 async function api(path, body) {
     const options = { credentials: 'same-origin', cache: 'no-store' };
     if (body !== undefined) { options.method = 'POST'; options.headers = { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }; options.body = JSON.stringify(body); }
     const response = await fetch(`/api/admin/${path}`, options);
-    if (response.status === 401) lock();
+    if (response.status === 401 || (response.status === 403 && body === undefined)) lock();
     if (response.status === 204) return null;
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || '요청을 처리하지 못했습니다.');
@@ -97,18 +102,62 @@ async function loadAudit() {
     const rows = await api('audit');
     table($('audit'), ['시각', '관리자', '리뷰 ID', '작업', '사유'], rows.map(r => [new Date(r.created_at).toLocaleString('ko-KR'), r.admin, r.review_id, r.hidden ? '숨김' : '복구', r.reason]));
 }
-async function refresh() { try { await Promise.all([loadStats(), loadReviews(), loadAudit()]); message('최신 데이터를 불러왔습니다.'); } catch (error) { message(error.message, true); } }
+
+async function loadUsers() {
+    const request = ++usersRequest, page = userPage;
+    const params = new URLSearchParams({ page, search: $('user-search').value });
+    const data = await api(`users?${params}`);
+    if (request !== usersRequest || !isOwner) return;
+    const target = $('users'); target.replaceChildren();
+    if (!data.items.length) target.append(element('p', '조건에 맞는 사용자가 없습니다. 카카오 로그인 성공 시 등록됩니다.', 'empty'));
+    data.items.forEach(user => {
+        const card = element('article', undefined, 'review');
+        card.append(element('h3', `#${user.id} · ${user.nickname}`),
+            element('p', `${user.role === 'operator' ? '운영자' : '일반 사용자'} · 리뷰 ${number(user.review_count)}개`, 'note'),
+            element('p', `최초 로그인: ${new Date(user.first_login_at).toLocaleString('ko-KR')} · 최근 로그인: ${new Date(user.last_login_at).toLocaleString('ko-KR')}`, 'note'));
+        const nextRole = user.role === 'operator' ? 'user' : 'operator';
+        const action = nextRole === 'operator' ? '운영자 지정' : '운영자 권한 회수';
+        const button = element('button', action); button.type = 'button';
+        if (nextRole === 'user') button.className = 'danger';
+        button.addEventListener('click', async () => {
+            if (!window.confirm(`#${user.id} ${user.nickname}: ${action}하시겠습니까?`)) return;
+            button.disabled = true;
+            try { await api(`users/${user.id}/role`, { role: nextRole }); await Promise.all([loadUsers(), loadRoleAudit()]); message('사용자 권한과 변경 이력을 갱신했습니다.'); }
+            catch (error) { message(error.message, true); } finally { button.disabled = false; }
+        });
+        card.append(button); target.append(card);
+    });
+    $('user-page').textContent = `${page} / ${Math.max(1, Math.ceil(data.total / 50))} 페이지 · ${number(data.total)}명`;
+    $('user-previous').disabled = page <= 1; $('user-next').disabled = page * 50 >= data.total;
+}
+async function loadRoleAudit() {
+    const request = ++roleAuditRequest;
+    const rows = await api('user-role-audit');
+    if (request !== roleAuditRequest || !isOwner) return;
+    const label = role => role === 'operator' ? '운영자' : '일반 사용자';
+    table($('role-audit'), ['시각', '관리자', '사용자 번호', '변경 전', '변경 후'],
+        rows.map(r => [new Date(r.created_at).toLocaleString('ko-KR'), r.admin, r.user_id, label(r.before_role), label(r.after_role)]));
+}
+
+async function refresh() {
+    try {
+        const tasks = [loadStats(), loadReviews(), loadAudit()];
+        if (isOwner) tasks.push(loadUsers(), loadRoleAudit());
+        await Promise.all(tasks); message('최신 데이터를 불러왔습니다.');
+    } catch (error) { message(error.message, true); }
+}
 async function initialize() {
     try {
         const session = await api('session'); csrf = session.csrf; $('username').value = session.username;
-        if (!session.enabled) message('관리자 계정 설정이 필요합니다.', true);
-        if (session.authenticated) { unlock(); await refresh(); } else lock();
+        isOwner = session.owner === true;
+        if (session.authenticated) { unlock(); await refresh(); }
+        else { lock(); if (session.logged_in) message('현재 카카오 계정에 운영 권한이 없습니다. 관리자에게 권한 부여를 요청하세요.', true); else if (!session.enabled) message('관리자 계정 설정이 필요합니다.', true); }
     } catch (error) { message(error.message, true); }
 }
 document.addEventListener('DOMContentLoaded', () => {
     $('login-form').addEventListener('submit', async event => {
         event.preventDefault(); const button = event.currentTarget.querySelector('button'); button.disabled = true;
-        try { const result = await api('login', { username: $('username').value, password: $('password').value }); csrf = result.csrf; $('password').value = ''; unlock(); await refresh(); }
+        try { const result = await api('login', { username: $('username').value, password: $('password').value }); csrf = result.csrf; $('password').value = ''; await initialize(); }
         catch (error) { message(error.message, true); await initialize(); } finally { button.disabled = false; }
     });
     $('logout').addEventListener('click', async () => { try { await api('logout', {}); lock(); await initialize(); message('로그아웃했습니다.'); } catch (error) { message(error.message, true); } });
@@ -116,5 +165,8 @@ document.addEventListener('DOMContentLoaded', () => {
     $('review-filter').addEventListener('submit', async e => { e.preventDefault(); reviewPage = 1; try { await loadReviews(); } catch (error) { message(error.message, true); } });
     $('previous').addEventListener('click', async () => { reviewPage = Math.max(1, reviewPage - 1); try { await loadReviews(); } catch (error) { message(error.message, true); } });
     $('next').addEventListener('click', async () => { reviewPage++; try { await loadReviews(); } catch (error) { message(error.message, true); } });
+    $('user-filter').addEventListener('submit', async e => { e.preventDefault(); userPage = 1; try { await loadUsers(); } catch (error) { message(error.message, true); } });
+    $('user-previous').addEventListener('click', async () => { userPage = Math.max(1, userPage - 1); try { await loadUsers(); } catch (error) { message(error.message, true); } });
+    $('user-next').addEventListener('click', async () => { userPage++; try { await loadUsers(); } catch (error) { message(error.message, true); } });
     initialize();
 });

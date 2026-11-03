@@ -2,12 +2,13 @@
 <html lang="ko">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>스쿠잇 관리자</title><link rel="stylesheet" href="/static/admin.css"><script src="/static/admin.js" defer></script></head>
 <body>
-<header><a href="/">🍽 스쿠잇</a><span>운영 관리</span><button id="logout" hidden>로그아웃</button></header>
+<header><a href="/">🍽 스쿠잇</a><span id="access-label">운영 관리</span><button id="logout" hidden>로그아웃</button></header>
 <main>
 <p id="message" role="status" aria-live="polite"></p>
 <section id="login-panel" class="login-panel">
 <p class="eyebrow">SKUEAT ADMIN</p><h1>관리자 로그인</h1><p>방문 통계와 리뷰를 한곳에서 관리하세요.</p>
 <form id="login-form"><label>아이디<input id="username" name="username" autocomplete="username" required maxlength="80"></label><label>비밀번호<input id="password" name="password" type="password" autocomplete="current-password" required maxlength="72"></label><button type="submit">로그인</button></form>
+<p><a class="kakao-login" href="/login/kakao?next=%2Fadmin">카카오 계정으로 운영자 로그인</a></p><p class="note">운영자로 지정된 계정만 리뷰·통계를 관리할 수 있습니다.</p>
 </section>
 <div id="dashboard" hidden>
 <div class="title-row"><div><p class="eyebrow">OVERVIEW</p><h1>스쿠잇 운영 현황</h1><p id="tracking-note"></p></div><label>조회 기간<select id="days"><option value="7">최근 7일</option><option value="30">최근 30일</option><option value="90">최근 90일</option></select></label><button id="refresh">새로고침</button></div>
@@ -18,6 +19,11 @@
 <section class="panel"><h2>관심을 받은 음식점</h2><p class="note">상세조회 / 길찾기 클릭 / 룰렛 선정 횟수입니다. 실제 매장 방문 수는 아닙니다.</p><div id="restaurants" class="table-wrap"></div></section>
 <section class="panel"><div class="title-row"><div><p class="eyebrow">MODERATION</p><h2>리뷰 관리</h2></div></div><p class="note">숨김 처리하면 공개 리뷰와 평점에서 제외되며 복구할 수 있습니다. 낮은 별점과 비판 의견도 존중하고 욕설·스팸·개인정보 노출 등 관리 사유를 기록하세요.</p>
 <form id="review-filter" class="filters"><label>표시 상태<select id="review-status"><option value="all">전체</option><option value="visible">공개</option><option value="hidden">숨김</option></select></label><label>식당 / 리뷰 검색<input id="review-search" maxlength="80" type="search" placeholder="음식점 또는 내용"></label><button>조회</button></form><div id="reviews"></div><div class="pagination"><button id="previous">이전</button><span id="review-page"></span><button id="next">다음</button></div></section>
+<section class="panel" id="user-management" hidden><h2>사용자 관리</h2>
+<p class="note">카카오 로그인 성공 시 등록됩니다. 과거 로그인 일시는 추정하지 않습니다. 별도 관리자만 목록과 권한을 관리할 수 있습니다. 운영자는 리뷰·통계만 관리합니다.</p>
+<form id="user-filter" class="filters"><label>닉네임 / 사용자 번호<input id="user-search" type="search" maxlength="80" placeholder="닉네임 또는 내부 번호"></label><button>검색</button></form>
+<div id="users"></div><div class="pagination"><button id="user-previous">이전</button><span id="user-page"></span><button id="user-next">다음</button></div>
+<h3>최근 권한 변경 이력</h3><div id="role-audit" class="table-wrap"></div></section>
 <section class="panel"><h2>최근 관리 이력</h2><div id="audit" class="table-wrap"></div></section>
 </div>
 </main></body></html>

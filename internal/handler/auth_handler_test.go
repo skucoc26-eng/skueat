@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"restaurant-api/internal/model"
+	"restaurant-api/internal/service"
 )
 
 type stubAuthService struct {
@@ -38,7 +39,8 @@ func TestKakaoOAuthState(t *testing.T) {
 	auth := &stubAuthService{}
 	router := gin.New()
 	router.Use(sessions.Sessions("mysession", cookie.NewStore([]byte("test-secret"))))
-	h := NewAuthHandler(auth)
+	db := newAdminFixture(t).db
+	h := NewAuthHandler(auth, db)
 	router.GET("/login/kakao", h.LoginKakao)
 	router.GET("/auth/kakao/callback", h.AuthKakaoCallback)
 	router.GET("/me", func(c *gin.Context) {
@@ -99,6 +101,14 @@ func TestKakaoOAuthState(t *testing.T) {
 	router.ServeHTTP(me, meRequest)
 	if me.Code != http.StatusOK {
 		t.Fatalf("authenticated profile returned %d, want 200", me.Code)
+	}
+	var users []model.User
+	if err := db.Find(&users).Error; err != nil || len(users) != 1 || users[0].KakaoUserID != 123 || users[0].Role != "user" {
+		t.Fatalf("OAuth did not persist default user: %v", err)
+	}
+	_, total, err := service.NewManagementService(db).Users("", 1)
+	if err != nil || total != 1 {
+		t.Fatal("user list missing successful login")
 	}
 	if got := callback(state, valid.Result().Cookies()); got.Code != http.StatusBadRequest {
 		t.Fatalf("replayed state returned %d, want 400", got.Code)

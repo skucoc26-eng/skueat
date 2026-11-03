@@ -9,16 +9,18 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 
 	"restaurant-api/internal/model"
 )
 
 // InitDB SQLite DB 연결 및 테이블 마이그레이션, 초기 시드 데이터를 적재합니다.
 func InitDB(dbPath string) (*gorm.DB, error) {
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{Logger: logger.New(log.Default(), logger.Config{SlowThreshold: 200 * time.Millisecond, LogLevel: logger.Warn, ParameterizedQueries: true})})
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +32,7 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 	sqlDB.SetMaxOpenConns(1)
 
 	// 테이블 자동 마이그레이션
-	if err := db.AutoMigrate(&model.Restaurant{}, &model.Rating{}, &model.ReviewModeration{}, &model.UsageEvent{}, &model.AdminSession{}); err != nil {
+	if err := db.AutoMigrate(&model.Restaurant{}, &model.Rating{}, &model.ReviewModeration{}, &model.UsageEvent{}, &model.AdminSession{}, &model.User{}, &model.UserRoleChange{}); err != nil {
 		return nil, err
 	}
 

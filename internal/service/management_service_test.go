@@ -22,7 +22,7 @@ func managementDB(t *testing.T) *gorm.DB {
 	sqlDB, _ := db.DB()
 	sqlDB.SetMaxOpenConns(1)
 	t.Cleanup(func() { sqlDB.Close() })
-	if err := db.AutoMigrate(&model.Restaurant{}, &model.Rating{}, &model.UsageEvent{}, &model.ReviewModeration{}); err != nil {
+	if err := db.AutoMigrate(&model.Restaurant{}, &model.Rating{}, &model.UsageEvent{}, &model.ReviewModeration{}, &model.User{}, &model.UserRoleChange{}, &model.AdminSession{}); err != nil {
 		t.Fatal(err)
 	}
 	return db

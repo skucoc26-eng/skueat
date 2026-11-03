@@ -3,6 +3,7 @@ package model
 import "time"
 
 type AdminSession struct {
+	UserID    uint      `gorm:"not null;default:0;index"`
 	Token     string    `gorm:"primaryKey"`
 	ExpiresAt time.Time `gorm:"index"`
 }

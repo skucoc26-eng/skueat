@@ -41,7 +41,7 @@ func newAdminFixture(t *testing.T) *adminFixture {
 	sqlDB, _ := db.DB()
 	sqlDB.SetMaxOpenConns(1)
 	t.Cleanup(func() { sqlDB.Close() })
-	if err := db.AutoMigrate(&model.Restaurant{}, &model.Rating{}, &model.ReviewModeration{}, &model.UsageEvent{}, &model.AdminSession{}); err != nil {
+	if err := db.AutoMigrate(&model.Restaurant{}, &model.Rating{}, &model.ReviewModeration{}, &model.UsageEvent{}, &model.AdminSession{}, &model.User{}, &model.UserRoleChange{}); err != nil {
 		t.Fatal(err)
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte("test-password"), bcrypt.MinCost)
@@ -51,7 +51,7 @@ func newAdminFixture(t *testing.T) *adminFixture {
 	cfg := &config.Config{SessionSecret: "test-secret", AppDomain: "http://example.test", AdminUsername: "owner", AdminPasswordHash: string(hash)}
 	r := gin.New()
 	t.Chdir("../../cmd")
-	h := NewHandler(cfg, NewPageHandler(cfg), NewRestaurantHandler(nil), NewReviewHandler(nil), NewAuthHandler(nil))
+	h := NewHandler(cfg, NewPageHandler(cfg), NewRestaurantHandler(nil), NewReviewHandler(nil), NewAuthHandler(&stubAuthService{}, db))
 	h.Admin = NewAdminHandler(cfg, db)
 	h.SetupRouter(r)
 	r.GET("/expire-test", func(c *gin.Context) {
@@ -347,8 +347,9 @@ func TestAnonymousAnalyticsAndAdminExclusion(t *testing.T) {
 func TestPublicLogoutWithoutAdminClearsOrdinarySession(t *testing.T) {
 	t.Chdir("../../cmd")
 	cfg := &config.Config{SessionSecret: "test-secret"}
+	var db *gorm.DB
 	r := gin.New()
-	h := NewHandler(cfg, NewPageHandler(cfg), NewRestaurantHandler(nil), NewReviewHandler(nil), NewAuthHandler(nil))
+	h := NewHandler(cfg, NewPageHandler(cfg), NewRestaurantHandler(nil), NewReviewHandler(nil), NewAuthHandler(&stubAuthService{}, db))
 	h.SetupRouter(r)
 	r.GET("/ordinary-login-test", func(c *gin.Context) {
 		s := sessions.Default(c)

@@ -39,7 +39,7 @@ func main() {
 	pageHandler := handler.NewPageHandler(cfg)
 	restHandler := handler.NewRestaurantHandler(restSvc)
 	revHandler := handler.NewReviewHandler(revSvc)
-	authHandler := handler.NewAuthHandler(authSvc)
+	authHandler := handler.NewAuthHandler(authSvc, db)
 
 	appHandler := handler.NewHandler(cfg, pageHandler, restHandler, revHandler, authHandler)
 	appHandler.Admin = handler.NewAdminHandler(cfg, db)

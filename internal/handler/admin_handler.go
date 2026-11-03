@@ -81,13 +81,15 @@ func (h *AdminHandler) authenticated(c *gin.Context) bool {
 		return false
 	}
 	var count int64
-	return h.db.Model(&model.AdminSession{}).Where("token = ? AND expires_at > ?", token, time.Now().UTC()).Count(&count).Error == nil && count == 1
+	return h.db.Model(&model.AdminSession{}).Where("token = ? AND user_id = 0 AND expires_at > ?", token, time.Now().UTC()).Count(&count).Error == nil && count == 1
 }
 func (h *AdminHandler) requireAdmin(c *gin.Context) {
-	if !h.authenticated(c) {
-		c.AbortWithStatusJSON(401, gin.H{"error": "관리자 로그인이 필요합니다."})
+	actor, _ := h.access(c)
+	if actor == "" {
+		h.denyAccess(c)
 		return
 	}
+	c.Set("manager", actor)
 	c.Next()
 }
 func (h *AdminHandler) sameOrigin(c *gin.Context) bool {
@@ -125,6 +127,11 @@ func (h *AdminHandler) Register(r *gin.Engine) {
 	protected.GET("/reviews", h.Reviews)
 	protected.GET("/audit", h.Audit)
 	protected.POST("/reviews/:id/moderation", h.csrf, h.Moderate)
+	owner := g.Group("")
+	owner.Use(h.requireOwner)
+	owner.GET("/users", h.Users)
+	owner.POST("/users/:id/role", h.csrf, h.SetUserRole)
+	owner.GET("/user-role-audit", h.UserRoleAudit)
 	r.POST("/api/events", h.Event)
 }
 func (h *AdminHandler) Session(c *gin.Context) {
@@ -138,7 +145,9 @@ func (h *AdminHandler) Session(c *gin.Context) {
 			return
 		}
 	}
-	c.JSON(200, gin.H{"enabled": h.enabled(), "authenticated": h.authenticated(c), "csrf": csrf, "username": h.username()})
+	actor, owner := h.access(c)
+	_, _, loggedIn := getValidUser(s)
+	c.JSON(200, gin.H{"enabled": h.enabled(), "authenticated": actor != "", "owner": owner, "logged_in": loggedIn, "csrf": csrf, "username": h.username()})
 }
 func (h *AdminHandler) Login(c *gin.Context) {
 	if !h.enabled() {
@@ -215,10 +224,16 @@ func (h *AdminHandler) Login(c *gin.Context) {
 	c.JSON(200, gin.H{"csrf": s.Get("adminCSRF")})
 }
 func (h *AdminHandler) revokeSession(c *gin.Context) error {
-	if token, ok := sessions.Default(c).Get("adminToken").(string); ok && token != "" {
-		return h.db.Where("token = ?", token).Delete(&model.AdminSession{}).Error
+	tokens := []string{}
+	for _, key := range []string{"adminToken", "userToken"} {
+		if token, ok := sessions.Default(c).Get(key).(string); ok && token != "" {
+			tokens = append(tokens, token)
+		}
 	}
-	return nil
+	if len(tokens) == 0 {
+		return nil
+	}
+	return h.db.Where("token IN ?", tokens).Delete(&model.AdminSession{}).Error
 }
 func (h *AdminHandler) Logout(c *gin.Context) {
 	if err := h.revokeSession(c); err != nil {
@@ -229,6 +244,9 @@ func (h *AdminHandler) Logout(c *gin.Context) {
 	s.Delete("adminToken")
 	s.Delete("adminUntil")
 	s.Delete("adminVersion")
+	for _, key := range []string{"userName", "kakaoUserID", "loginTime", "userToken"} {
+		s.Delete(key)
+	}
 	s.Set("adminCSRF", randomToken())
 	if s.Save() != nil {
 		c.Status(500)
@@ -289,7 +307,7 @@ func (h *AdminHandler) Moderate(c *gin.Context) {
 		managementError(c, service.ErrManagementInput)
 		return
 	}
-	if err := h.svc.Moderate(uint(id), *input.Hidden, input.Reason, h.username()); err != nil {
+	if err := h.svc.Moderate(uint(id), *input.Hidden, input.Reason, c.GetString("manager")); err != nil {
 		managementError(c, err)
 		return
 	}
@@ -326,7 +344,7 @@ func (h *AdminHandler) Event(c *gin.Context) {
 		c.Status(403)
 		return
 	}
-	if h.authenticated(c) {
+	if actor, _ := h.access(c); actor != "" {
 		c.Status(204)
 		return
 	}

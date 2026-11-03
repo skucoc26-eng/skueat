@@ -10,18 +10,20 @@ import (
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"restaurant-api/internal/service"
 )
 
 // AuthHandler 카카오 OAuth 및 세션 제어 HTTP 핸들러
 type AuthHandler struct {
-	svc service.AuthService
+	svc   service.AuthService
+	users *service.ManagementService
 }
 
 // NewAuthHandler AuthHandler 생성
-func NewAuthHandler(svc service.AuthService) *AuthHandler {
-	return &AuthHandler{svc: svc}
+func NewAuthHandler(svc service.AuthService, db *gorm.DB) *AuthHandler {
+	return &AuthHandler{svc: svc, users: service.NewManagementService(db)}
 }
 
 // LoginKakao 카카오 간편 로그인 시작 엔드포인트 (GET /login/kakao)
@@ -33,7 +35,14 @@ func (h *AuthHandler) LoginKakao(c *gin.Context) {
 
 	session := sessions.Default(c)
 	session.Set("oauth_state", state)
-	_ = session.Save()
+	session.Delete("oauth_next")
+	if c.Query("next") == "/admin" {
+		session.Set("oauth_next", "/admin")
+	}
+	if err := session.Save(); err != nil {
+		c.Status(500)
+		return
+	}
 
 	authURL := h.svc.GetAuthURL(state)
 	c.Redirect(http.StatusFound, authURL)
@@ -57,6 +66,8 @@ func (h *AuthHandler) AuthKakaoCallback(c *gin.Context) {
 		return
 	}
 	session.Delete("oauth_state")
+	next, _ := session.Get("oauth_next").(string)
+	session.Delete("oauth_next")
 
 	tokenRes, err := h.svc.GetToken(code)
 	if err != nil {
@@ -76,7 +87,21 @@ func (h *AuthHandler) AuthKakaoCallback(c *gin.Context) {
 		c.String(http.StatusBadGateway, "유효하지 않은 카카오 사용자 정보입니다.")
 		return
 	}
-	session.Set("userName", userInfo.Properties.Nickname)
+	nickname := userInfo.Properties.Nickname
+	if nickname == "" {
+		nickname = userInfo.KakaoAccount.Profile.Nickname
+	}
+	oldToken, _ := session.Get("userToken").(string)
+	token := randomToken()
+	user, err := h.users.LoginUser(userInfo.ID, nickname, token, oldToken, time.Now())
+	if err != nil {
+		log.Printf("ERROR 사용자 저장 실패: %v", err)
+		c.String(http.StatusInternalServerError, "사용자 정보를 저장하지 못했습니다.")
+		return
+	}
+	session.Set("userToken", token)
+	session.Set("adminCSRF", randomToken())
+	session.Set("userName", user.Nickname)
 	session.Set("kakaoUserID", strconv.FormatInt(userInfo.ID, 10))
 	session.Set("loginTime", time.Now().Unix())
 	if err := session.Save(); err != nil {
@@ -85,6 +110,10 @@ func (h *AuthHandler) AuthKakaoCallback(c *gin.Context) {
 		return
 	}
 
+	if next == "/admin" {
+		c.Redirect(http.StatusFound, "/admin")
+		return
+	}
 	c.Redirect(http.StatusFound, "/")
 }
 
@@ -92,6 +121,9 @@ func (h *AuthHandler) AuthKakaoCallback(c *gin.Context) {
 func (h *AuthHandler) Logout(c *gin.Context) {
 	session := sessions.Default(c)
 	session.Clear()
-	_ = session.Save()
+	if err := session.Save(); err != nil {
+		c.Status(500)
+		return
+	}
 	c.Redirect(http.StatusFound, "/")
 }

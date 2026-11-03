@@ -59,7 +59,7 @@ func TestAdminMigrationSnapshot(t *testing.T) {
 			}
 		}
 	}
-	for _, table := range []interface{}{&model.AdminSession{}, &model.UsageEvent{}, &model.ReviewModeration{}} {
+	for _, table := range []interface{}{&model.AdminSession{}, &model.UsageEvent{}, &model.ReviewModeration{}, &model.User{}, &model.UserRoleChange{}} {
 		if !after.Migrator().HasTable(table) {
 			t.Fatal("management table missing")
 		}

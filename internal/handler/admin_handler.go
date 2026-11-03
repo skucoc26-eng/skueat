@@ -8,8 +8,10 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"errors"
+	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,12 +34,16 @@ type AdminHandler struct {
 	svc      *service.ManagementService
 	db       *gorm.DB
 	mu       sync.Mutex
-	failures int
-	window   time.Time
+	attempts map[string]loginFailures
+}
+
+type loginFailures struct {
+	count int
+	since time.Time
 }
 
 func NewAdminHandler(cfg *config.Config, db *gorm.DB) *AdminHandler {
-	return &AdminHandler{cfg: cfg, svc: service.NewManagementService(db), db: db}
+	return &AdminHandler{cfg: cfg, svc: service.NewManagementService(db), db: db, attempts: make(map[string]loginFailures)}
 }
 func (h *AdminHandler) enabled() bool {
 	_, err := bcrypt.Cost([]byte(h.cfg.AdminPasswordHash))
@@ -141,11 +147,22 @@ func (h *AdminHandler) Login(c *gin.Context) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if time.Since(h.window) >= time.Minute {
-		h.window = time.Now()
-		h.failures = 0
+	now := time.Now()
+	for ip, attempt := range h.attempts {
+		if now.Sub(attempt.since) >= time.Minute {
+			delete(h.attempts, ip)
+		}
 	}
-	if h.failures >= 10 {
+	ip := c.RemoteIP()
+	// Only Fly Proxy supplies a trusted client header; ignore forwarding headers off Fly.
+	if os.Getenv("FLY_APP_NAME") != "" {
+		if client := net.ParseIP(c.GetHeader("Fly-Client-IP")); client != nil {
+			ip = client.String()
+		}
+	}
+	attempt, known := h.attempts[ip]
+	// shortcut: limits are local to one server; share them before adding instances.
+	if attempt.count >= 10 || (!known && len(h.attempts) >= 1024) {
 		c.Header("Retry-After", "60")
 		c.JSON(429, gin.H{"error": "로그인 시도가 많습니다. 1분 뒤 다시 시도해 주세요."})
 		return
@@ -162,11 +179,15 @@ func (h *AdminHandler) Login(c *gin.Context) {
 	validPassword := bcrypt.CompareHashAndPassword([]byte(h.cfg.AdminPasswordHash), []byte(input.Password)) == nil
 	validUser := subtle.ConstantTimeCompare([]byte(input.Username), []byte(h.username())) == 1
 	if !validUser || !validPassword {
-		h.failures++
+		if !known {
+			attempt.since = now
+		}
+		attempt.count++
+		h.attempts[ip] = attempt
 		c.JSON(401, gin.H{"error": "아이디 또는 비밀번호가 일치하지 않습니다."})
 		return
 	}
-	h.failures = 0
+	delete(h.attempts, ip)
 	s := sessions.Default(c)
 	if err := h.db.Where("expires_at <= ?", time.Now().UTC()).Delete(&model.AdminSession{}).Error; err != nil {
 		c.Status(500)
@@ -193,14 +214,18 @@ func (h *AdminHandler) Login(c *gin.Context) {
 	}
 	c.JSON(200, gin.H{"csrf": s.Get("adminCSRF")})
 }
-func (h *AdminHandler) Logout(c *gin.Context) {
-	s := sessions.Default(c)
-	if token, ok := s.Get("adminToken").(string); ok {
-		if err := h.db.Where("token = ?", token).Delete(&model.AdminSession{}).Error; err != nil {
-			c.Status(500)
-			return
-		}
+func (h *AdminHandler) revokeSession(c *gin.Context) error {
+	if token, ok := sessions.Default(c).Get("adminToken").(string); ok && token != "" {
+		return h.db.Where("token = ?", token).Delete(&model.AdminSession{}).Error
 	}
+	return nil
+}
+func (h *AdminHandler) Logout(c *gin.Context) {
+	if err := h.revokeSession(c); err != nil {
+		c.Status(500)
+		return
+	}
+	s := sessions.Default(c)
 	s.Delete("adminToken")
 	s.Delete("adminUntil")
 	s.Delete("adminVersion")

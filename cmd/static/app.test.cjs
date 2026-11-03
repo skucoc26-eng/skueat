@@ -180,3 +180,30 @@ test('older search response cannot replace the latest result', async () => {
     await first;
     assert.equal(context.rendered[0], 'B');
 });
+
+for (const withMap of [false, true]) {
+    test(`GPS refresh does not count as a new search (map=${withMap})`, () => {
+        const events = [], requests = [];
+        const input = { value: '후로', blur() {} };
+        const gps = { classList: { add() {} }, innerHTML: '' };
+        const maps = { LatLng: class {}, CustomOverlay: class { setMap() {} }, Circle: class { setMap() {} } };
+        const { context } = loadApp({
+            document: {
+                addEventListener() {},
+                getElementById(id) { return id === 'search-input' ? input : gps; },
+                querySelector() { return { dataset: { category: 'all' } }; },
+                createElement() { return { style: {} }; },
+            },
+            window: { skueatTrack(type, fields) { events.push({ type, ...fields }); }, ...(withMap ? { kakao: { maps } } : {}) },
+            kakao: { maps },
+            navigator: { geolocation: { getCurrentPosition(success) { success({ coords: { latitude: 37.38, longitude: 126.93 } }); } } },
+            requests,
+        });
+        vm.runInContext(`expandBottomSheet = () => {}; fetchData = (category, keyword) => requests.push({category, keyword}); ${withMap ? 'map = { panTo() {} };' : ''} applySearch(); requestUserLocation();`, context);
+        assert.equal(requests.length, 2, 'GPS must still refresh the list');
+        assert.equal(requests[1].keyword, '후로');
+        assert.equal(events.filter(e => e.type === 'search').length, 1, 'GPS must not count as another search');
+        vm.runInContext('applySearch()', context);
+        assert.equal(events.filter(e => e.type === 'search').length, 2, 'explicit repeated searches still count');
+    });
+}

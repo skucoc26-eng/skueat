@@ -2,6 +2,7 @@
 let csrf = '';
 let reviewPage = 1;
 let statsRequest = 0;
+let reviewsRequest = 0;
 const $ = id => document.getElementById(id);
 const number = value => Number(value || 0).toLocaleString('ko-KR');
 function message(text, error = false) { $('message').textContent = text; $('message').className = error ? 'error' : ''; }
@@ -70,8 +71,12 @@ async function loadStats() {
     table($('restaurants'), ['음식점', '상세조회', '길찾기', '룰렛 선정'], data.restaurants.map(r => [r.title, number(r.details), number(r.directions), number(r.roulette)]));
 }
 async function loadReviews() {
-    const params = new URLSearchParams({ page: reviewPage, status: $('review-status').value, search: $('review-search').value });
-    const data = await api(`reviews?${params}`); const target = $('reviews'); target.replaceChildren();
+    const request = ++reviewsRequest;
+    const page = reviewPage;
+    const params = new URLSearchParams({ page, status: $('review-status').value, search: $('review-search').value });
+    const data = await api(`reviews?${params}`);
+    if (request !== reviewsRequest) return;
+    const target = $('reviews'); target.replaceChildren();
     if (!data.items.length) target.append(element('p', '조건에 맞는 리뷰가 없습니다.', 'empty'));
     data.items.forEach(review => {
         const card = element('article', undefined, `review ${review.hidden ? 'is-hidden' : ''}`);
@@ -85,8 +90,8 @@ async function loadReviews() {
             catch (error) { message(error.message, true); } finally { button.disabled = false; }
         }); card.append(form); target.append(card);
     });
-    $('review-page').textContent = `${reviewPage} / ${Math.max(1, Math.ceil(data.total / 50))} 페이지 · ${number(data.total)}건`;
-    $('previous').disabled = reviewPage <= 1; $('next').disabled = reviewPage * 50 >= data.total;
+    $('review-page').textContent = `${page} / ${Math.max(1, Math.ceil(data.total / 50))} 페이지 · ${number(data.total)}건`;
+    $('previous').disabled = page <= 1; $('next').disabled = page * 50 >= data.total;
 }
 async function loadAudit() {
     const rows = await api('audit');

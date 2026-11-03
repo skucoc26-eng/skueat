@@ -80,7 +80,15 @@ func (h *Handler) SetupRouter(r *gin.Engine) {
 	{
 		auth.GET("/login/kakao", h.Auth.LoginKakao)
 		auth.GET("/auth/kakao/callback", h.Auth.AuthKakaoCallback)
-		auth.GET("/logout", h.Auth.Logout)
+		auth.GET("/logout", func(c *gin.Context) {
+			if h.Admin != nil {
+				if err := h.Admin.revokeSession(c); err != nil {
+					c.Status(http.StatusInternalServerError)
+					return
+				}
+			}
+			h.Auth.Logout(c)
+		})
 	}
 	if h.Admin != nil {
 		h.Admin.Register(r)

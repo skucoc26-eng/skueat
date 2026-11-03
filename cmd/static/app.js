@@ -188,7 +188,7 @@ function requestUserLocation() {
             }
 
             if (!map || !window.kakao || !window.kakao.maps) {
-                applySearch();
+                applySearch(false);
                 return;
             }
 
@@ -227,7 +227,7 @@ function requestUserLocation() {
             map.panTo(locPosition);
 
             // 거리 순 정렬을 위해 리스트 새로고침
-            applySearch();
+            applySearch(false);
         },
         (error) => {
             console.error("위치 획득 실패", error);
@@ -745,7 +745,7 @@ function applyFilter(category, btn) {
     fetchData(category, searchInput ? searchInput.value : '');
 }
 
-function applySearch() {
+function applySearch(recordSearch = true) {
     const input = document.getElementById('search-input');
     const activeBtn = document.querySelector('.cat-btn.active');
     const category = activeBtn ? activeBtn.dataset.category : 'all';
@@ -757,7 +757,7 @@ function applySearch() {
     expandBottomSheet(70);
 
     const keyword = input ? input.value.trim() : '';
-    if (keyword) window.skueatTrack?.('search', { query: keyword.slice(0, 80), category });
+    if (recordSearch && keyword) window.skueatTrack?.('search', { query: keyword.slice(0, 80), category });
     fetchData(category === 'all' ? 'all' : category, keyword);
 }
 

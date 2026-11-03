@@ -2,6 +2,8 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,7 +11,6 @@ import (
 	"time"
 
 	"github.com/gin-contrib/sessions"
-	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"golang.org/x/crypto/bcrypt"
@@ -19,15 +20,19 @@ import (
 )
 
 type adminFixture struct {
-	router  *gin.Engine
-	cfg     *config.Config
-	db      *gorm.DB
-	cookies []*http.Cookie
-	csrf    string
+	router     *gin.Engine
+	cfg        *config.Config
+	db         *gorm.DB
+	admin      *AdminHandler
+	cookies    []*http.Cookie
+	csrf       string
+	remoteAddr string
+	headers    map[string]string
 }
 
 func newAdminFixture(t *testing.T) *adminFixture {
 	t.Helper()
+	t.Setenv("FLY_APP_NAME", "")
 	gin.SetMode(gin.TestMode)
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
@@ -45,15 +50,17 @@ func newAdminFixture(t *testing.T) *adminFixture {
 	}
 	cfg := &config.Config{SessionSecret: "test-secret", AppDomain: "http://example.test", AdminUsername: "owner", AdminPasswordHash: string(hash)}
 	r := gin.New()
-	r.Use(sessions.Sessions("mysession", cookie.NewStore([]byte(cfg.SessionSecret))))
-	NewAdminHandler(cfg, db).Register(r)
+	t.Chdir("../../cmd")
+	h := NewHandler(cfg, NewPageHandler(cfg), NewRestaurantHandler(nil), NewReviewHandler(nil), NewAuthHandler(nil))
+	h.Admin = NewAdminHandler(cfg, db)
+	h.SetupRouter(r)
 	r.GET("/expire-test", func(c *gin.Context) {
 		s := sessions.Default(c)
 		s.Set("adminUntil", time.Now().Add(-time.Minute).Unix())
 		_ = s.Save()
 		c.Status(204)
 	})
-	f := &adminFixture{router: r, cfg: cfg, db: db}
+	f := &adminFixture{router: r, cfg: cfg, db: db, admin: h.Admin}
 	res := f.request("GET", "/api/admin/session", "", "")
 	var v struct {
 		CSRF string `json:"csrf"`
@@ -66,6 +73,12 @@ func newAdminFixture(t *testing.T) *adminFixture {
 }
 func (f *adminFixture) request(method, path, body, origin string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(method, path, strings.NewReader(body))
+	if f.remoteAddr != "" {
+		r.RemoteAddr = f.remoteAddr
+	}
+	for name, value := range f.headers {
+		r.Header.Set(name, value)
+	}
 	r.Header.Set("Content-Type", "application/json")
 	if origin != "" {
 		r.Header.Set("Origin", origin)
@@ -93,6 +106,129 @@ func (f *adminFixture) request(method, path, body, origin string) *httptest.Resp
 		}
 	}
 	return w
+}
+
+func newAdminVisitor(t *testing.T, server *adminFixture, remoteAddr string) *adminFixture {
+	t.Helper()
+	f := &adminFixture{router: server.router, cfg: server.cfg, db: server.db, remoteAddr: remoteAddr}
+	w := f.request("GET", "/api/admin/session", "", "")
+	var data struct {
+		CSRF string `json:"csrf"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &data); err != nil {
+		t.Fatal(err)
+	}
+	f.csrf = data.CSRF
+	return f
+}
+
+func TestPublicLogoutRevokesAdminSession(t *testing.T) {
+	f := newAdminFixture(t)
+	f.login(t)
+	copiedCookies := append([]*http.Cookie(nil), f.cookies...)
+	if w := f.request("GET", "/logout", "", ""); w.Code != 302 || w.Header().Get("Location") != "/" {
+		t.Fatalf("logout=%d %s", w.Code, w.Body.String())
+	}
+	f.cookies = copiedCookies
+	if w := f.request("GET", "/api/admin/stats", "", ""); w.Code != 401 {
+		t.Fatalf("copied admin cookie after public logout=%d, want 401", w.Code)
+	}
+	var count int64
+	f.db.Model(&model.AdminSession{}).Count(&count)
+	if count != 0 {
+		t.Fatalf("admin sessions after logout=%d", count)
+	}
+}
+
+func TestPublicLogoutDoesNotReportSuccessWhenRevocationFails(t *testing.T) {
+	f := newAdminFixture(t)
+	f.login(t)
+	if err := f.db.Callback().Delete().Before("gorm:delete").Register("fail_admin_revocation", func(tx *gorm.DB) {
+		if tx.Statement.Table == "admin_sessions" {
+			tx.AddError(errors.New("test DB failure"))
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if w := f.request("GET", "/logout", "", ""); w.Code != 500 || w.Header().Get("Location") != "" {
+		t.Fatalf("failed revocation reported success: %d", w.Code)
+	}
+}
+
+func TestAdminLoginFailuresDoNotBlockOtherClients(t *testing.T) {
+	for _, fly := range []bool{false, true} {
+		t.Run(fmt.Sprint("fly=", fly), func(t *testing.T) {
+			attacker := newAdminFixture(t)
+			attacker.remoteAddr = "192.0.2.1:1200"
+			owner := newAdminVisitor(t, attacker, "192.0.2.2:1300")
+			if fly {
+				t.Setenv("FLY_APP_NAME", "skueat")
+				attacker.remoteAddr, owner.remoteAddr = "127.0.0.1:1200", "127.0.0.1:1300"
+				attacker.headers = map[string]string{"Fly-Client-IP": "192.0.2.1"}
+				owner.headers = map[string]string{"Fly-Client-IP": "192.0.2.2"}
+			}
+			for i := 0; i < 10; i++ {
+				if w := attacker.request("POST", "/api/admin/login", `{"username":"owner","password":"wrong"}`, "http://example.test"); w.Code != 401 {
+					t.Fatalf("failure %d=%d", i, w.Code)
+				}
+			}
+			owner.login(t)
+			if w := attacker.request("POST", "/api/admin/login", `{"username":"owner","password":"test-password"}`, "http://example.test"); w.Code != 429 {
+				t.Fatalf("other client's success reset attacker limit=%d", w.Code)
+			}
+		})
+	}
+}
+
+func TestAdminLoginLimitSurvivesCookieAndUntrustedHeaderChanges(t *testing.T) {
+	f := newAdminFixture(t)
+	f.remoteAddr = "192.0.2.1:1200"
+	for i := 0; i < 10; i++ {
+		f.request("POST", "/api/admin/login", `{"username":"owner","password":"wrong"}`, "http://example.test")
+	}
+	retry := newAdminVisitor(t, f, "192.0.2.1:1300")
+	retry.headers = map[string]string{"X-Forwarded-For": "192.0.2.2", "Fly-Client-IP": "192.0.2.2"}
+	if w := retry.request("POST", "/api/admin/login", `{"username":"owner","password":"test-password"}`, "http://example.test"); w.Code != 429 {
+		t.Fatalf("cookie/header change bypassed limit=%d", w.Code)
+	}
+}
+
+func TestAdminLoginLimitExpiresAndStaysBounded(t *testing.T) {
+	f := newAdminFixture(t)
+	f.remoteAddr = "192.0.2.1:1200"
+	now := time.Now()
+	for i := 0; i < 1024; i++ {
+		f.admin.attempts[fmt.Sprint(i)] = loginFailures{count: 10, since: now}
+	}
+	if w := f.request("POST", "/api/admin/login", `{"username":"owner","password":"test-password"}`, "http://example.test"); w.Code != 429 {
+		t.Fatalf("full limiter must fail closed=%d", w.Code)
+	}
+	if len(f.admin.attempts) != 1024 {
+		t.Fatalf("limiter grew to %d", len(f.admin.attempts))
+	}
+	for ip, attempt := range f.admin.attempts {
+		attempt.since = now.Add(-time.Minute)
+		f.admin.attempts[ip] = attempt
+	}
+	f.admin.attempts["192.0.2.1"] = loginFailures{count: 10, since: now.Add(-time.Minute)}
+	f.login(t)
+	if len(f.admin.attempts) != 0 {
+		t.Fatalf("expired entries retained=%d", len(f.admin.attempts))
+	}
+}
+
+func TestAdminLoginInvalidFlyHeaderCannotResetLimit(t *testing.T) {
+	f := newAdminFixture(t)
+	t.Setenv("FLY_APP_NAME", "skueat")
+	f.remoteAddr = "192.0.2.1:1200"
+	f.headers = map[string]string{"Fly-Client-IP": "invalid"}
+	for i := 0; i < 10; i++ {
+		f.request("POST", "/api/admin/login", `{"username":"owner","password":"wrong"}`, "http://example.test")
+	}
+	f.headers["Fly-Client-IP"] = "still-invalid"
+	if w := f.request("POST", "/api/admin/login", `{"username":"owner","password":"test-password"}`, "http://example.test"); w.Code != 429 {
+		t.Fatalf("invalid Fly header bypassed socket limit=%d", w.Code)
+	}
 }
 func (f *adminFixture) login(t *testing.T) {
 	t.Helper()
@@ -205,5 +341,41 @@ func TestAnonymousAnalyticsAndAdminExclusion(t *testing.T) {
 	f.db.Model(&model.UsageEvent{}).Count(&count)
 	if count != 2 {
 		t.Fatal("admin visit counted")
+	}
+}
+
+func TestPublicLogoutWithoutAdminClearsOrdinarySession(t *testing.T) {
+	t.Chdir("../../cmd")
+	cfg := &config.Config{SessionSecret: "test-secret"}
+	r := gin.New()
+	h := NewHandler(cfg, NewPageHandler(cfg), NewRestaurantHandler(nil), NewReviewHandler(nil), NewAuthHandler(nil))
+	h.SetupRouter(r)
+	r.GET("/ordinary-login-test", func(c *gin.Context) {
+		s := sessions.Default(c)
+		s.Set("userName", "테스터")
+		s.Set("kakaoUserID", "123")
+		s.Set("loginTime", time.Now().Unix())
+		if err := s.Save(); err != nil {
+			t.Fatal(err)
+		}
+		c.Status(204)
+	})
+	r.GET("/ordinary-user-test", func(c *gin.Context) {
+		if _, _, valid := getValidUser(sessions.Default(c)); !valid {
+			c.Status(401)
+			return
+		}
+		c.Status(200)
+	})
+	f := &adminFixture{router: r}
+	f.request("GET", "/ordinary-login-test", "", "")
+	if w := f.request("GET", "/ordinary-user-test", "", ""); w.Code != 200 {
+		t.Fatal("ordinary login failed")
+	}
+	if w := f.request("GET", "/logout", "", ""); w.Code != 302 {
+		t.Fatalf("ordinary logout=%d", w.Code)
+	}
+	if w := f.request("GET", "/ordinary-user-test", "", ""); w.Code != 401 {
+		t.Fatal("ordinary session survived logout")
 	}
 }

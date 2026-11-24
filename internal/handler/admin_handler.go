@@ -21,6 +21,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"restaurant-api/internal/config"
 	"restaurant-api/internal/model"
 	"restaurant-api/internal/service"
@@ -29,12 +30,18 @@ import (
 //go:embed admin.html
 var adminHTML string
 
+//go:embed admin_login.html
+var adminLoginHTML string
+
+var errAdminCodeUsed = errors.New("admin authentication code already used")
+
 type AdminHandler struct {
 	cfg      *config.Config
 	svc      *service.ManagementService
 	db       *gorm.DB
 	mu       sync.Mutex
 	attempts map[string]loginFailures
+	now      func() time.Time
 }
 
 type loginFailures struct {
@@ -43,11 +50,11 @@ type loginFailures struct {
 }
 
 func NewAdminHandler(cfg *config.Config, db *gorm.DB) *AdminHandler {
-	return &AdminHandler{cfg: cfg, svc: service.NewManagementService(db), db: db, attempts: make(map[string]loginFailures)}
+	return &AdminHandler{cfg: cfg, svc: service.NewManagementService(db), db: db, attempts: make(map[string]loginFailures), now: time.Now}
 }
 func (h *AdminHandler) enabled() bool {
 	_, err := bcrypt.Cost([]byte(h.cfg.AdminPasswordHash))
-	return err == nil
+	return err == nil && adminTOTPKey(h.cfg.AdminTOTPSecret) != nil
 }
 func (h *AdminHandler) username() string {
 	if h.cfg.AdminUsername != "" {
@@ -63,7 +70,8 @@ func randomToken() string {
 	return hex.EncodeToString(b[:])
 }
 func (h *AdminHandler) version() string {
-	sum := sha256.Sum256([]byte(h.username() + ":" + h.cfg.AdminPasswordHash))
+	keyID := sha256.Sum256(adminTOTPKey(h.cfg.AdminTOTPSecret))
+	sum := sha256.Sum256([]byte(h.username() + ":" + h.cfg.AdminPasswordHash + ":" + hex.EncodeToString(keyID[:])))
 	return hex.EncodeToString(sum[:])
 }
 func (h *AdminHandler) authenticated(c *gin.Context) bool {
@@ -111,10 +119,16 @@ func (h *AdminHandler) csrf(c *gin.Context) {
 }
 func (h *AdminHandler) Register(r *gin.Engine) {
 	r.GET("/admin", func(c *gin.Context) {
-		c.Header("Cache-Control", "no-store")
-		c.Header("X-Frame-Options", "DENY")
-		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'")
-		c.Data(200, "text/html; charset=utf-8", []byte(adminHTML))
+		adminPageHeaders(c)
+		if actor, _ := h.access(c); actor == "" {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(adminHTML))
+	})
+	r.GET("/admin/login", func(c *gin.Context) {
+		adminPageHeaders(c)
+		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(adminLoginHTML))
 	})
 	g := r.Group("/api/admin")
 	g.Use(func(c *gin.Context) { c.Header("Cache-Control", "no-store"); c.Next() })
@@ -134,6 +148,13 @@ func (h *AdminHandler) Register(r *gin.Engine) {
 	owner.GET("/user-role-audit", h.UserRoleAudit)
 	r.POST("/api/events", h.Event)
 }
+func adminPageHeaders(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	c.Header("X-Robots-Tag", "noindex, nofollow")
+	c.Header("X-Frame-Options", "DENY")
+	c.Header("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+}
+
 func (h *AdminHandler) Session(c *gin.Context) {
 	s := sessions.Default(c)
 	csrf, _ := s.Get("adminCSRF").(string)
@@ -147,7 +168,7 @@ func (h *AdminHandler) Session(c *gin.Context) {
 	}
 	actor, owner := h.access(c)
 	_, _, loggedIn := getValidUser(s)
-	c.JSON(200, gin.H{"enabled": h.enabled(), "authenticated": actor != "", "owner": owner, "logged_in": loggedIn, "csrf": csrf, "username": h.username()})
+	c.JSON(200, gin.H{"enabled": h.enabled(), "authenticated": actor != "", "owner": owner, "logged_in": loggedIn, "csrf": csrf})
 }
 func (h *AdminHandler) Login(c *gin.Context) {
 	if !h.enabled() {
@@ -156,7 +177,7 @@ func (h *AdminHandler) Login(c *gin.Context) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	now := time.Now()
+	now := h.now()
 	for ip, attempt := range h.attempts {
 		if now.Sub(attempt.since) >= time.Minute {
 			delete(h.attempts, ip)
@@ -180,6 +201,7 @@ func (h *AdminHandler) Login(c *gin.Context) {
 	var input struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
+		OTP      string `json:"otp"`
 	}
 	if c.ShouldBindJSON(&input) != nil || len(input.Password) > 72 {
 		c.JSON(400, gin.H{"error": "입력값을 확인해 주세요."})
@@ -187,34 +209,57 @@ func (h *AdminHandler) Login(c *gin.Context) {
 	}
 	validPassword := bcrypt.CompareHashAndPassword([]byte(h.cfg.AdminPasswordHash), []byte(input.Password)) == nil
 	validUser := subtle.ConstantTimeCompare([]byte(input.Username), []byte(h.username())) == 1
-	if !validUser || !validPassword {
+	reject := func() {
 		if !known {
 			attempt.since = now
 		}
 		attempt.count++
 		h.attempts[ip] = attempt
-		c.JSON(401, gin.H{"error": "아이디 또는 비밀번호가 일치하지 않습니다."})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "아이디, 비밀번호 또는 인증 앱 코드를 확인해 주세요. 사용한 코드는 다음 코드가 표시된 뒤 다시 시도해 주세요."})
+	}
+	if !validUser || !validPassword {
+		reject()
+		return
+	}
+	key := adminTOTPKey(h.cfg.AdminTOTPSecret)
+	step, validOTP := adminTOTPStep(key, input.OTP, now)
+	if !validOTP {
+		reject()
+		return
+	}
+	keyID := sha256.Sum256(key)
+	s := sessions.Default(c)
+	old, _ := s.Get("adminToken").(string)
+	token := randomToken()
+	expires := now.Add(4 * time.Hour).UTC()
+	err := h.db.Transaction(func(tx *gorm.DB) error {
+		used := tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "key_id"}},
+			DoUpdates: clause.AssignmentColumns([]string{"last_step"}),
+			Where:     clause.Where{Exprs: []clause.Expression{clause.Lt{Column: "last_step", Value: step}}},
+		}).Create(&model.AdminTOTPUse{KeyID: hex.EncodeToString(keyID[:]), LastStep: step})
+		if used.Error != nil {
+			return used.Error
+		}
+		if used.RowsAffected != 1 {
+			return errAdminCodeUsed
+		}
+		if err := tx.Where("expires_at <= ? OR (token = ? AND user_id = 0)", now.UTC(), old).Delete(&model.AdminSession{}).Error; err != nil {
+			return err
+		}
+		return tx.Create(&model.AdminSession{Token: token, ExpiresAt: expires}).Error
+	})
+	if errors.Is(err, errAdminCodeUsed) {
+		reject()
+		return
+	}
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
 		return
 	}
 	delete(h.attempts, ip)
-	s := sessions.Default(c)
-	if err := h.db.Where("expires_at <= ?", time.Now().UTC()).Delete(&model.AdminSession{}).Error; err != nil {
-		c.Status(500)
-		return
-	}
-	if old, ok := s.Get("adminToken").(string); ok {
-		if err := h.db.Where("token = ?", old).Delete(&model.AdminSession{}).Error; err != nil {
-			c.Status(500)
-			return
-		}
-	}
-	token := randomToken()
-	if err := h.db.Create(&model.AdminSession{Token: token, ExpiresAt: time.Now().Add(4 * time.Hour).UTC()}).Error; err != nil {
-		c.Status(500)
-		return
-	}
 	s.Set("adminToken", token)
-	s.Set("adminUntil", time.Now().Add(4*time.Hour).Unix())
+	s.Set("adminUntil", expires.Unix())
 	s.Set("adminVersion", h.version())
 	s.Set("adminCSRF", randomToken())
 	if s.Save() != nil {

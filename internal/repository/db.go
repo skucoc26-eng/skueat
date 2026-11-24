@@ -32,7 +32,7 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 	sqlDB.SetMaxOpenConns(1)
 
 	// 테이블 자동 마이그레이션
-	if err := db.AutoMigrate(&model.Restaurant{}, &model.Rating{}, &model.ReviewModeration{}, &model.UsageEvent{}, &model.AdminSession{}, &model.User{}, &model.UserRoleChange{}); err != nil {
+	if err := db.AutoMigrate(&model.Restaurant{}, &model.Rating{}, &model.ReviewModeration{}, &model.UsageEvent{}, &model.AdminSession{}, &model.User{}, &model.UserRoleChange{}, &model.AdminTOTPUse{}); err != nil {
 		return nil, err
 	}
 

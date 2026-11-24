@@ -20,11 +20,13 @@ func NewPageHandler(cfg *config.Config) *PageHandler {
 }
 
 // Index 메인 페이지 렌더링 (GET /)
-func (h *PageHandler) Index(c *gin.Context) {
+func (h *PageHandler) Index(c *gin.Context, canManage bool) {
 	session := sessions.Default(c)
 	userName, _, isLoggedIn := getValidUser(session)
 
+	c.Header("Cache-Control", "private, no-store")
 	c.HTML(http.StatusOK, "index.html", gin.H{
+		"CanManage":  canManage,
 		"ApiKey":     h.cfg.KakaoAPIKey,
 		"IsLoggedIn": isLoggedIn,
 		"UserName":   userName,

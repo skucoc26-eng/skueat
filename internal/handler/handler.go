@@ -66,7 +66,14 @@ func (h *Handler) SetupRouter(r *gin.Engine) {
 	r.LoadHTMLGlob("index.html")
 
 	// 4. 라우트 등록
-	r.GET("/", h.Page.Index)
+	r.GET("/", func(c *gin.Context) {
+		canManage := false
+		if h.Admin != nil {
+			actor, _ := h.Admin.access(c)
+			canManage = actor != ""
+		}
+		h.Page.Index(c, canManage)
+	})
 
 	api := r.Group("/api")
 	{

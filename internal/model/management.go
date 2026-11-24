@@ -8,6 +8,11 @@ type AdminSession struct {
 	ExpiresAt time.Time `gorm:"index"`
 }
 
+type AdminTOTPUse struct {
+	KeyID    string `gorm:"primaryKey"`
+	LastStep int64
+}
+
 type ReviewModeration struct {
 	ID        uint      `json:"id"`
 	CreatedAt time.Time `json:"created_at"`

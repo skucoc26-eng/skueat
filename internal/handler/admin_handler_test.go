@@ -41,14 +41,14 @@ func newAdminFixture(t *testing.T) *adminFixture {
 	sqlDB, _ := db.DB()
 	sqlDB.SetMaxOpenConns(1)
 	t.Cleanup(func() { sqlDB.Close() })
-	if err := db.AutoMigrate(&model.Restaurant{}, &model.Rating{}, &model.ReviewModeration{}, &model.UsageEvent{}, &model.AdminSession{}, &model.User{}, &model.UserRoleChange{}); err != nil {
+	if err := db.AutoMigrate(&model.Restaurant{}, &model.Rating{}, &model.ReviewModeration{}, &model.UsageEvent{}, &model.AdminSession{}, &model.User{}, &model.UserRoleChange{}, &model.AdminTOTPUse{}); err != nil {
 		t.Fatal(err)
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte("test-password"), bcrypt.MinCost)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg := &config.Config{SessionSecret: "test-secret", AppDomain: "http://example.test", AdminUsername: "owner", AdminPasswordHash: string(hash)}
+	cfg := &config.Config{SessionSecret: "test-secret", AppDomain: "http://example.test", AdminUsername: "owner", AdminPasswordHash: string(hash), AdminTOTPSecret: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"}
 	r := gin.New()
 	t.Chdir("../../cmd")
 	h := NewHandler(cfg, NewPageHandler(cfg), NewRestaurantHandler(nil), NewReviewHandler(nil), NewAuthHandler(&stubAuthService{}, db))
@@ -110,7 +110,7 @@ func (f *adminFixture) request(method, path, body, origin string) *httptest.Resp
 
 func newAdminVisitor(t *testing.T, server *adminFixture, remoteAddr string) *adminFixture {
 	t.Helper()
-	f := &adminFixture{router: server.router, cfg: server.cfg, db: server.db, remoteAddr: remoteAddr}
+	f := &adminFixture{router: server.router, cfg: server.cfg, db: server.db, admin: server.admin, remoteAddr: remoteAddr}
 	w := f.request("GET", "/api/admin/session", "", "")
 	var data struct {
 		CSRF string `json:"csrf"`
@@ -232,7 +232,17 @@ func TestAdminLoginInvalidFlyHeaderCannotResetLimit(t *testing.T) {
 }
 func (f *adminFixture) login(t *testing.T) {
 	t.Helper()
-	w := f.request("POST", "/api/admin/login", `{"username":"owner","password":"test-password"}`, "http://example.test")
+	var last int64
+	if err := f.db.Model(&model.AdminTOTPUse{}).Select("COALESCE(MAX(last_step), -1)").Scan(&last).Error; err != nil {
+		t.Fatal(err)
+	}
+	now := f.admin.now()
+	if now.Unix()/30 <= last {
+		now = time.Unix((last+1)*30, 0)
+		f.admin.now = func() time.Time { return now }
+	}
+	code := adminTOTPCode(adminTOTPKey(f.cfg.AdminTOTPSecret), now.Unix()/30)
+	w := f.request("POST", "/api/admin/login", ownerLoginBody(code), "http://example.test")
 	if w.Code != 200 {
 		t.Fatalf("login=%d %s", w.Code, w.Body.String())
 	}

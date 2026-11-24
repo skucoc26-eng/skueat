@@ -24,6 +24,7 @@ type Config struct {
 	DatabasePath      string
 	AdminUsername     string
 	AdminPasswordHash string
+	AdminTOTPSecret   string
 }
 
 // LoadConfig .env 파일을 읽어들여 Config 구조체로 반환
@@ -70,6 +71,7 @@ func LoadConfig() *Config {
 		DatabasePath:      dbPath,
 		AdminUsername:     os.Getenv("ADMIN_USERNAME"),
 		AdminPasswordHash: os.Getenv("ADMIN_PASSWORD_HASH"),
+		AdminTOTPSecret:   os.Getenv("ADMIN_TOTP_SECRET"),
 	}
 }
 

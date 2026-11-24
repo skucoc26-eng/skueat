@@ -132,7 +132,7 @@
         <div class="settings-group">
             <label class="radio-label"><input type="checkbox" id="analytics-opt-out"> 이용 통계 수집 끄기</label>
             <p>검색어·식당 클릭과 방문을 익명 브라우저 기준으로 90일간 집계합니다. 통계에 IP·카카오 계정·위치를 저장하지 않습니다.</p>
-            <a href="/admin">운영자 관리</a>
+            {{if .CanManage}}<a href="/admin">운영자 관리</a>{{end}}
         </div>
         <button class="settings-save-btn" id="btn-save-settings">저장 완료</button>
     </div>

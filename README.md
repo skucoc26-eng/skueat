@@ -196,7 +196,7 @@ docker run -d -p 8080:8080 \
 
 ### 관리자 및 이용 통계
 
-- `/admin`에서 별도 관리자 계정으로 로그인합니다. 세션은 4시간이며 로그아웃·비밀번호 교체로 무효화됩니다.
+- 최고 관리자는 `/admin/login`에서 비밀번호와 인증 앱의 시간 기반 6자리 코드로 로그인합니다. `/admin`과 메인 설정의 운영자 메뉴는 서버에서 기존 권한이 확인된 경우에만 제공됩니다. 최고 관리자 세션은 4시간이며 로그아웃이나 비밀번호·인증 키 변경으로 무효화됩니다.
 - 리뷰는 사유를 입력하여 숨김/복구합니다. 숨김 리뷰는 공개 목록·평점에서 제외되며 원문과 관리 이력은 보존합니다. 낮은 별점 자체는 삭제 사유가 아닙니다.
 - 최근 7/30/90일 방문수, 익명 브라우저 수, 일별 추이, 검색어, 카테고리, 식당 상세조회·길찾기·룰렛, `utm_source`별 유입을 확인할 수 있습니다.
 - 방문자는 실제 사람 수가 아닌 90일 쿠키 기준 추정치입니다. IP·위치·카카오 계정과 연결하지 않고 원시 이벤트는 90일 보관합니다. 설정의 **이용 통계 수집 끄기**로 수집을 거부할 수 있습니다. 브라우저/차단기/네트워크 오류 때문에 일부 행동이 누락될 수 있습니다.
@@ -207,11 +207,14 @@ docker run -d -p 8080:8080 \
 ```powershell
 go run ./cmd/admin-password -output "$env:LOCALAPPDATA\skueat-admin\admin-credentials.json"
 $admin = Get-Content "$env:LOCALAPPDATA\skueat-admin\admin-credentials.json" -Raw | ConvertFrom-Json
-@("ADMIN_USERNAME=$($admin.username)", "ADMIN_PASSWORD_HASH=$($admin.password_hash)") | flyctl secrets import -a skueat --stage
+# 인증 앱에 시간 기반 계정으로 등록한 Base32 키를 사용자 전용 파일에서 읽습니다.
+$otpKey = (Get-Content "$env:LOCALAPPDATA\skueat-admin-mfa\skueat-authenticator-key.txt" -Raw).Trim()
+@("ADMIN_USERNAME=$($admin.username)", "ADMIN_PASSWORD_HASH=$($admin.password_hash)", "ADMIN_TOTP_SECRET=$otpKey") | flyctl secrets import -a skueat --stage
+Remove-Variable otpKey
 flyctl deploy
 ```
 
-환경변수 `ADMIN_USERNAME`(기본 `admin`)과 `ADMIN_PASSWORD_HASH`(bcrypt)를 설정하면 활성화됩니다. 해시가 없거나 잘못되면 관리자 로그인은 닫힙니다. 계정 변경 시 새 자격 증명 파일을 생성하여 해시를 교체합니다. `SESSION_SECRET`도 운영에서 고정 설정해야 합니다.
+환경변수 `ADMIN_USERNAME`(기본 `admin`), `ADMIN_PASSWORD_HASH`(bcrypt), `ADMIN_TOTP_SECRET`(160비트 이상 난수, 패딩 없는 Base32)을 설정합니다. 코드 생성 설정은 SHA-1, 6자리, 30초 주기입니다. 인증 앱과 서버에서 시간을 자동으로 맞추세요. 이미 사용한 코드는 다음 코드가 표시될 때까지 다시 사용할 수 없습니다. 해시 또는 인증 키 설정이 잘못되면 최고 관리자 로그인은 닫힙니다. 인증 앱을 잃어버린 경우 배포 권한을 가진 사람이 새 키를 생성해 Fly Secret을 교체하고 다시 등록합니다. `SESSION_SECRET`도 운영에서 고정 설정해야 합니다.
 
 관리자 변경 API와 로그인에는 CSRF 토큰·정확한 Origin 검증이 적용됩니다. 반복 실패는 IP별 분당 10회로 제한하며 쿠키 변경으로 초기화되지 않습니다. 제한 정보는 현재 단일 서버의 메모리에만 보관하며 로그인 요청 때 만료 정보를 삭제하고 최대 1,024개로 제한합니다. 한도가 차면 새 IP도 만료 후 다시 시도해야 합니다. 같은 공인 IP를 공유하는 접속자는 제한을 공유하며 서버 재시작 시 초기화됩니다. Fly 환경(`FLY_APP_NAME` 설정)에서는 [Fly Proxy의 Fly-Client-IP](https://docs.fly.io/networking/request-headers#fly-client-ip)를 사용하므로 HTTP 접근은 Fly Proxy를 통해야 합니다. 그 외 환경에서는 소켓 IP를 사용하고 전달 헤더는 신뢰하지 않습니다. 관리자 화면과 일반 사이트의 로그아웃 모두 서버의 관리자 토큰을 폐기합니다.
 
@@ -226,7 +229,7 @@ node --test cmd/static/*.test.cjs
 
 - 카카오 로그인에 성공하면 고유 계정 ID로 회원을 등록하고 닉네임·최근 로그인을 갱신합니다. 같은 계정이 중복 등록되거나 기존 권한이 초기화되지 않습니다.
 - 별도 관리자 계정으로 `/admin`에 접속하면 **사용자 관리**에서 닉네임/내부번호 검색, 최초·최근 로그인, 작성 리뷰 수, 운영자 지정·회수를 사용할 수 있습니다. 사용자 목록과 권한 변경 이력은 별도 관리자만 볼 수 있습니다.
-- 카카오 운영자는 `/admin`의 **카카오 계정으로 운영자 로그인**으로 들어와 리뷰·통계를 관리합니다. 다른 사용자의 목록이나 권한 변경에는 접근할 수 없습니다.
+- 카카오 운영자는 메인 사이트에서 카카오 로그인 후 **설정 → 운영자 관리**로 들어와 리뷰·통계를 관리합니다. 사용자 목록과 권한 변경은 최고 관리자 계정에서 사용할 수 있습니다.
 - 운영 권한과 서버 관리 세션을 요청마다 검사합니다. 권한 회수 시 기존 관리 세션을 폐기하며, 재지정 후에는 카카오 재로그인이 필요합니다. 별도 관리자/운영자 화면의 로그아웃은 현재 브라우저의 카카오 로그인도 함께 종료합니다. 권한 변경과 리뷰 관리의 행위자·시각을 기록합니다.
 - 회원 목록은 이 기능 배포 후 카카오 로그인부터 채워집니다. 이전 로그인 이력이나 최초 로그인 시각은 소급 생성하지 않습니다. 기존 로그인 쿠키만 있는 사용자는 일반 리뷰 기능을 계속 쓸 수 있지만 운영 기능에는 다시 로그인해야 합니다.
 - 이메일·전화번호·프로필 사진은 저장하지 않습니다. 카카오 고유 ID와 세션 토큰은 사용자 목록 응답에 포함하지 않으며 익명 방문 통계와 회원 계정을 연결하지 않습니다.

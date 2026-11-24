@@ -9,15 +9,18 @@ const number = value => Number(value || 0).toLocaleString('ko-KR');
 function message(text, error = false) { $('message').textContent = text; $('message').className = error ? 'error' : ''; }
 function lock() {
     isOwner = false; ++usersRequest; ++roleAuditRequest; ++reviewsRequest; ++statsRequest;
-    $('dashboard').hidden = true; $('login-panel').hidden = false; $('logout').hidden = true;
+    $('dashboard').hidden = true; $('logout').hidden = true;
     $('user-management').hidden = true; $('users').replaceChildren(); $('role-audit').replaceChildren();
 }
-function unlock() { $('dashboard').hidden = false; $('login-panel').hidden = true; $('logout').hidden = false; $('user-management').hidden = !isOwner; $('access-label').textContent = isOwner ? '관리자' : '운영자'; }
+function unlock() { $('dashboard').hidden = false; $('logout').hidden = false; $('user-management').hidden = !isOwner; $('access-label').textContent = isOwner ? '관리자' : '운영자'; }
 async function api(path, body) {
     const options = { credentials: 'same-origin', cache: 'no-store' };
     if (body !== undefined) { options.method = 'POST'; options.headers = { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }; options.body = JSON.stringify(body); }
     const response = await fetch(`/api/admin/${path}`, options);
-    if (response.status === 401 || (response.status === 403 && body === undefined)) lock();
+    if ($('dashboard') && (response.status === 401 || (response.status === 403 && body === undefined))) {
+        lock();
+        window.location.replace('/');
+    }
     if (response.status === 204) return null;
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || '요청을 처리하지 못했습니다.');
@@ -148,19 +151,52 @@ async function refresh() {
 }
 async function initialize() {
     try {
-        const session = await api('session'); csrf = session.csrf; $('username').value = session.username;
+        const session = await api('session'); csrf = session.csrf;
+        if (!session.authenticated) {
+            lock();
+            window.location.replace('/');
+            return;
+        }
         isOwner = session.owner === true;
-        if (session.authenticated) { unlock(); await refresh(); }
-        else { lock(); if (session.logged_in) message('현재 카카오 계정에 운영 권한이 없습니다. 관리자에게 권한 부여를 요청하세요.', true); else if (!session.enabled) message('관리자 계정 설정이 필요합니다.', true); }
+        unlock();
+        await refresh();
+    } catch (error) { message(error.message, true); }
+}
+async function setupLogin(form) {
+    const button = form.querySelector('button');
+    form.addEventListener('submit', async event => {
+        event.preventDefault();
+        if (button.disabled) return;
+        button.disabled = true;
+        try {
+            await api('login', { username: $('username').value, password: $('password').value, otp: $('otp').value });
+            window.location.replace('/admin');
+        } catch (error) {
+            message(error.message, true);
+            $('otp').value = '';
+            $('otp').focus();
+            button.disabled = false;
+        }
+    });
+    try {
+        const session = await api('session');
+        csrf = session.csrf;
+        if (session.owner) {
+            window.location.replace('/admin');
+        } else if (session.enabled) {
+            button.disabled = false;
+        } else {
+            message('관리자 인증 설정이 필요합니다.', true);
+        }
     } catch (error) { message(error.message, true); }
 }
 document.addEventListener('DOMContentLoaded', () => {
-    $('login-form').addEventListener('submit', async event => {
-        event.preventDefault(); const button = event.currentTarget.querySelector('button'); button.disabled = true;
-        try { const result = await api('login', { username: $('username').value, password: $('password').value }); csrf = result.csrf; $('password').value = ''; await initialize(); }
-        catch (error) { message(error.message, true); await initialize(); } finally { button.disabled = false; }
-    });
-    $('logout').addEventListener('click', async () => { try { await api('logout', {}); lock(); await initialize(); message('로그아웃했습니다.'); } catch (error) { message(error.message, true); } });
+    const loginForm = $('login-form');
+    if (loginForm) {
+        setupLogin(loginForm);
+        return;
+    }
+    $('logout').addEventListener('click', async () => { try { await api('logout', {}); lock(); window.location.replace('/'); } catch (error) { message(error.message, true); } });
     $('days').addEventListener('change', refresh); $('refresh').addEventListener('click', refresh);
     $('review-filter').addEventListener('submit', async e => { e.preventDefault(); reviewPage = 1; try { await loadReviews(); } catch (error) { message(error.message, true); } });
     $('previous').addEventListener('click', async () => { reviewPage = Math.max(1, reviewPage - 1); try { await loadReviews(); } catch (error) { message(error.message, true); } });

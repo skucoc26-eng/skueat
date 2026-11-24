@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>스쿠잇 관리자 로그인</title>
+<link rel="stylesheet" href="/static/admin.css">
+<script src="/static/admin.js" defer></script>
+</head>
+<body>
+<header><a href="/">스쿠잇</a></header>
+<main>
+<section class="login-panel">
+<h1>최고 관리자 로그인</h1>
+<p id="message" role="status" aria-live="polite"></p>
+<form id="login-form" method="post">
+<label>아이디<input id="username" autocomplete="username" required maxlength="80"></label>
+<label>비밀번호<input id="password" type="password" autocomplete="current-password" required maxlength="72"></label>
+<label>인증 코드 (6자리)<input id="otp" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label>
+<button type="submit" disabled>로그인</button>
+</form>
+</section>
+</main>
+</body>
+</html>

@@ -43,6 +43,12 @@ func TestUserManagementAuthorizationAndImmediateRevocation(t *testing.T) {
 		t.Fatalf("Kakao login=%d %s", w.Code, w.Body.String())
 	}
 	refreshVisitorCSRF(t, member)
+	if w := member.request("GET", "/admin", "", ""); w.Code != 404 {
+		t.Fatalf("regular user dashboard = %d", w.Code)
+	}
+	if w := member.request("GET", "/", "", ""); w.Code != 200 || strings.Contains(w.Body.String(), ">운영자 관리</a>") {
+		t.Fatal("regular user sees management link")
+	}
 	var user model.User
 	if err := owner.db.First(&user).Error; err != nil {
 		t.Fatal(err)
@@ -70,6 +76,12 @@ func TestUserManagementAuthorizationAndImmediateRevocation(t *testing.T) {
 	}
 	if w := owner.request("POST", rolePath, `{"role":"operator"}`, "http://example.test"); w.Code != 204 {
 		t.Fatalf("grant=%d %s", w.Code, w.Body.String())
+	}
+	if w := member.request("GET", "/admin", "", ""); w.Code != 200 || !strings.Contains(w.Body.String(), "스쿠잇 운영 현황") {
+		t.Fatalf("operator dashboard = %d", w.Code)
+	}
+	if w := member.request("GET", "/", "", ""); w.Code != 200 || !strings.Contains(w.Body.String(), ">운영자 관리</a>") {
+		t.Fatal("operator management link missing")
 	}
 	state := refreshVisitorCSRF(t, member)
 	if state["authenticated"] != true || state["owner"] != false {
@@ -110,6 +122,12 @@ func TestUserManagementAuthorizationAndImmediateRevocation(t *testing.T) {
 	}
 	if w := member.request("GET", "/api/admin/stats", "", ""); w.Code != 403 {
 		t.Fatal("revocation not immediate")
+	}
+	if w := member.request("GET", "/admin", "", ""); w.Code != 404 {
+		t.Fatalf("revoked operator dashboard = %d", w.Code)
+	}
+	if w := member.request("GET", "/", "", ""); w.Code != 200 || strings.Contains(w.Body.String(), ">운영자 관리</a>") {
+		t.Fatal("revoked operator sees management link")
 	}
 	owner.request("POST", rolePath, `{"role":"operator"}`, "http://example.test")
 	if w := member.request("GET", "/api/admin/stats", "", ""); w.Code != 403 {
